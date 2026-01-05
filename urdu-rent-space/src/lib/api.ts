@@ -247,4 +247,60 @@ export const messageApi = {
     api.post(`/messages/conversations/${conversationId}/read`),
 };
 
+// Admin API (Super Admin only)
+export const adminApi = {
+  // Dashboard
+  getDashboard: () => api.get('/admin/dashboard'),
+  
+  // User Management
+  getUsers: (params?: { page?: number; limit?: number; search?: string; status?: string; role?: string }) =>
+    api.get('/admin/users', { params }),
+  getUser: (userId: string) => api.get(`/admin/users/${userId}`),
+  updateUserStatus: (userId: string, data: { status: string; reason?: string }) =>
+    api.put(`/admin/users/${userId}/status`, data),
+  verifyUser: (userId: string, type: string) =>
+    api.put(`/admin/users/${userId}/verify`, { type }),
+  updateUserRole: (userId: string, isAdmin: boolean) =>
+    api.put(`/admin/users/${userId}/role`, { isAdmin }),
+  deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
+  
+  // Listing Management
+  getListings: (params?: { page?: number; limit?: number; status?: string; category?: string }) =>
+    api.get('/admin/listings', { params }),
+  updateListingStatus: (listingId: string, data: { status: string; reason?: string }) =>
+    api.put(`/admin/listings/${listingId}/status`, data),
+  verifyListing: (listingId: string, verified: boolean) =>
+    api.put(`/admin/listings/${listingId}/verify`, { verified }),
+  featureListing: (listingId: string, featured: boolean) =>
+    api.put(`/admin/listings/${listingId}/feature`, { featured }),
+  deleteListing: (listingId: string) => api.delete(`/admin/listings/${listingId}`),
+  
+  // Verification Management
+  getVerifications: (params?: { page?: number; limit?: number; type?: string; status?: string }) =>
+    api.get('/admin/verifications', { params }),
+  approveVerification: (userId: string, type: string) =>
+    api.put(`/admin/verifications/${userId}/approve`, { type }),
+  rejectVerification: (userId: string, type: string, reason: string) =>
+    api.put(`/admin/verifications/${userId}/reject`, { type, reason }),
+  
+  // Booking Management
+  getBookings: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/admin/bookings', { params }),
+  
+  // Analytics
+  getRevenueAnalytics: (period?: number) =>
+    api.get('/admin/analytics/revenue', { params: { period } }),
+  getUserAnalytics: (period?: number) =>
+    api.get('/admin/analytics/users', { params: { period } }),
+  getListingAnalytics: () => api.get('/admin/analytics/listings'),
+  
+  // Category Management
+  getCategories: () => api.get('/admin/settings/categories'),
+  createCategory: (data: any) => api.post('/admin/settings/categories', data),
+  updateCategory: (categoryId: string, data: any) =>
+    api.put(`/admin/settings/categories/${categoryId}`, data),
+  deleteCategory: (categoryId: string) =>
+    api.delete(`/admin/settings/categories/${categoryId}`),
+};
+
 export default api;
