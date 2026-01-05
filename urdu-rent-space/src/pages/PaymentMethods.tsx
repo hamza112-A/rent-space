@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
@@ -17,11 +17,25 @@ import {
   Shield,
   CheckCircle2,
   Lock,
+  Loader2,
 } from 'lucide-react';
+
+interface BookingDetails {
+  bookingId: string;
+  listingId: string;
+  item: string;
+  dates: string;
+  nights: number;
+  pricePerNight: number;
+  subtotal: number;
+  serviceFee: number;
+  total: number;
+}
 
 const PaymentMethods: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedMethod, setSelectedMethod] = useState('jazzcash');
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -32,16 +46,26 @@ const PaymentMethods: React.FC = () => {
     cvv: '',
   });
 
-  // Mock booking details
-  const bookingDetails = {
-    item: 'Luxury 3BR Apartment in DHA Phase 5',
-    dates: 'Jan 10 - Jan 15, 2026',
-    nights: 5,
-    pricePerNight: 15000,
-    subtotal: 75000,
-    serviceFee: 3750,
-    total: 78750,
+  // Get booking details from navigation state
+  const bookingDetails: BookingDetails = location.state?.bookingDetails || {
+    bookingId: '',
+    listingId: '',
+    item: 'No booking selected',
+    dates: '',
+    nights: 0,
+    pricePerNight: 0,
+    subtotal: 0,
+    serviceFee: 0,
+    total: 0,
   };
+
+  useEffect(() => {
+    // Redirect if no booking details
+    if (!location.state?.bookingDetails) {
+      toast.error('No booking details found');
+      navigate('/');
+    }
+  }, [location.state, navigate]);
 
   const paymentMethods = [
     {
@@ -69,13 +93,75 @@ const PaymentMethods: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!bookingDetails.bookingId) {
+      toast.error('Invalid booking');
+      return;
+    }
+
+    // Validate form based on payment method
+    if (selectedMethod === 'jazzcash' || selectedMethod === 'easypaisa') {
+      if (!formData.mobileNumber || formData.mobileNumber.length < 11) {
+        toast.error('Please enter a valid mobile number');
+        return;
+      }
+    } else if (selectedMethod === 'card') {
+      if (!formData.cardNumber || !formData.cardName || !formData.expiry || !formData.cvv) {
+        toast.error('Please fill in all card details');
+        return;
+      }
+    }
+
     setIsLoading(true);
     
-    setTimeout(() => {
+    try {
+      // Initiate payment
+      const initiateResponse = await fetch('http://localhost:5000/api/v1/payments/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          bookingId: bookingDetails.bookingId,
+          method: selectedMethod,
+          amount: bookingDetails.total,
+        }),
+      });
+
+      const initiateData = await initiateResponse.json();
+      
+      if (!initiateData.success) {
+        throw new Error(initiateData.message || 'Failed to initiate payment');
+      }
+
+      // Simulate payment gateway processing
+      // In production, this would redirect to actual payment gateway
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Verify payment (mock transaction ID for demo)
+      const verifyResponse = await fetch('http://localhost:5000/api/v1/payments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          paymentId: initiateData.data._id,
+          transactionId: `TXN${Date.now()}`,
+        }),
+      });
+
+      const verifyData = await verifyResponse.json();
+
+      if (!verifyData.success) {
+        throw new Error(verifyData.message || 'Payment verification failed');
+      }
+
+      toast.success('Payment successful! Your booking is confirmed.');
+      navigate('/dashboard', { state: { tab: 'bookings' } });
+    } catch (error: any) {
+      console.error('Payment error:', error);
+      toast.error(error.message || 'Payment failed. Please try again.');
+    } finally {
       setIsLoading(false);
-      toast.success('Payment successful!');
-      navigate('/dashboard');
-    }, 2000);
+    }
   };
 
   return (
@@ -223,8 +309,15 @@ const PaymentMethods: React.FC = () => {
                       <span className="text-sm">Your payment information is encrypted and secure</span>
                     </div>
 
-                    <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-                      {isLoading ? t.payment.processing : `Pay PKR ${bookingDetails.total.toLocaleString()}`}
+                    <Button type="submit" className="w-full" size="lg" disabled={isLoading || !bookingDetails.bookingId}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t.payment.processing}
+                        </>
+                      ) : (
+                        `Pay PKR ${bookingDetails.total.toLocaleString()}`
+                      )}
                     </Button>
                   </CardContent>
                 </Card>

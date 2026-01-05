@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -34,12 +35,16 @@ import { toast } from 'sonner';
 
 const AccountSettings: React.FC = () => {
   const { language, setLanguage } = useLanguage();
-  const { user, updateUser, logout } = useAuth();
+  const { user, updateUser, logout, checkAuth } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
-    fullName: user?.fullName || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
+    fullName: '',
+    email: '',
+    phone: '',
     bio: '',
     address: '',
   });
@@ -50,13 +55,102 @@ const AccountSettings: React.FC = () => {
     marketing: false,
   });
 
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      setLoading(true);
+      const response = await userApi.getProfile();
+      const userData = response.data?.data;
+      if (userData) {
+        setFormData({
+          fullName: userData.fullName || '',
+          email: userData.email || '',
+          phone: userData.phone || '',
+          bio: userData.bio || '',
+          address: userData.location?.address || '',
+        });
+        setProfileImage(userData.avatar?.url || null);
+        if (userData.preferences?.notifications) {
+          setNotifications({
+            email: userData.preferences.notifications.email ?? true,
+            sms: userData.preferences.notifications.sms ?? true,
+            push: userData.preferences.notifications.push ?? false,
+            marketing: userData.preferences.notifications.marketing ?? false,
+          });
+        }
+      }
+    } catch (err) {
+      // Fallback to auth context user data
+      if (user) {
+        setFormData({
+          fullName: user.fullName || '',
+          email: user.email || '',
+          phone: user.phone || '',
+          bio: '',
+          address: '',
+        });
+        setProfileImage(user.profileImage || null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await userApi.updateProfile(formData);
+      
+      if (response.data?.data) {
+        const newImageUrl = response.data.data.avatar?.url || response.data.data.profileImage;
+        setProfileImage(newImageUrl);
+        updateUser(response.data.data);
+        await checkAuth(); // Refresh user data
+        toast.success('Profile picture updated successfully');
+      }
+    } catch (err) {
+      console.error('Failed to upload image:', err);
+      toast.error('Failed to upload profile picture');
+    } finally {
+      setUploadingImage(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
       const response = await userApi.updateProfile({
         fullName: formData.fullName,
         bio: formData.bio,
-        address: formData.address,
+        location: { address: formData.address },
+        preferences: {
+          notifications: notifications,
+        },
       });
       if (response.data?.data) {
         updateUser(response.data.data);
@@ -78,6 +172,26 @@ const AccountSettings: React.FC = () => {
       .slice(0, 2);
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex gap-6">
+              <Skeleton className="h-24 w-24 rounded-full" />
+              <div className="flex-1 space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Skeleton className="h-48 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -97,19 +211,36 @@ const AccountSettings: React.FC = () => {
         <CardContent className="space-y-6">
           <div className="flex flex-col sm:flex-row items-start gap-6">
             <div className="relative">
-              <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold">
-                {user?.profileImage ? (
-                  <img src={user.profileImage} alt={user.fullName} className="w-full h-full rounded-full object-cover" />
+              <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold overflow-hidden">
+                {profileImage || user?.profileImage ? (
+                  <img 
+                    src={profileImage || user?.profileImage} 
+                    alt={formData.fullName || 'Profile'} 
+                    className="w-full h-full object-cover" 
+                  />
                 ) : (
-                  getInitials(user?.fullName || 'U')
+                  getInitials(formData.fullName || user?.fullName || 'U')
                 )}
               </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
               <Button 
                 size="icon" 
                 variant="outline" 
                 className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
               >
-                <Camera className="h-4 w-4" />
+                {uploadingImage ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                ) : (
+                  <Camera className="h-4 w-4" />
+                )}
               </Button>
             </div>
             <div className="flex-1 space-y-4">
