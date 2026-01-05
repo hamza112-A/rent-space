@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Your Email</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .card { background: #fff; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .header { text-align: center; margin-bottom: 30px; }
+    .header h1 { color: #2563eb; margin: 0; }
+    .otp-box { background: #f0f7ff; border: 2px dashed #2563eb; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0; }
+    .otp-code { font-size: 32px; font-weight: bold; color: #2563eb; letter-spacing: 8px; margin: 10px 0; }
+    .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+    .warning { background: #fff3cd; border-radius: 4px; padding: 10px; margin-top: 20px; font-size: 13px; color: #856404; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h1>{{appName}}</h1>
+      </div>
+      
+      <p>Hello {{fullName}},</p>
+      
+      <p>Thank you for registering with Urdu Rent Space. Please use the following OTP code to verify your email address:</p>
+      
+      <div class="otp-box">
+        <p style="margin: 0; color: #666;">Your verification code is:</p>
+        <div class="otp-code">{{otp}}</div>
+        <p style="margin: 0; color: #666; font-size: 13px;">This code expires in {{expiresIn}}</p>
+      </div>
+      
+      <p>If you didn't create an account with us, please ignore this email.</p>
+      
+      <div class="warning">
+        ⚠️ Never share this code with anyone. Our team will never ask for your OTP.
+      </div>
+      
+      <div class="footer">
+        <p>Best regards,<br>{{appName}} Team</p>
+        <p style="font-size: 12px;">© {{currentYear}} {{appName}}. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
