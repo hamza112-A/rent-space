@@ -455,8 +455,8 @@ bookingSchema.methods.approveExtension = function(extensionId) {
   return this.save();
 };
 
-// Method to check in
-bookingSchema.methods.checkIn = function(confirmedBy, notes = '', photos = []) {
+// Method to perform check in
+bookingSchema.methods.performCheckIn = function(confirmedBy, notes = '', photos = []) {
   this.checkIn.actualTime = new Date();
   this.checkIn.confirmedBy = confirmedBy;
   this.checkIn.notes = notes;
@@ -469,8 +469,8 @@ bookingSchema.methods.checkIn = function(confirmedBy, notes = '', photos = []) {
   return this.save();
 };
 
-// Method to check out
-bookingSchema.methods.checkOut = function(confirmedBy, notes = '', photos = [], damageReport = null) {
+// Method to perform check out
+bookingSchema.methods.performCheckOut = function(confirmedBy, notes = '', photos = [], damageReport = null) {
   this.checkOut.actualTime = new Date();
   this.checkOut.confirmedBy = confirmedBy;
   this.checkOut.notes = notes;
