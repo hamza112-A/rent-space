@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft, Package, ShoppingBag, RefreshCw } from 'lucide-react';
+import { authApi } from '@/lib/api';
 
 const Register: React.FC = () => {
   const { t } = useLanguage();
@@ -44,11 +45,41 @@ const Register: React.FC = () => {
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      // Format phone number to +92 format
+      let phone = formData.phone.replace(/\s+/g, '').replace(/-/g, '');
+      if (phone.startsWith('0')) {
+        phone = '+92' + phone.substring(1);
+      } else if (!phone.startsWith('+92')) {
+        phone = '+92' + phone;
+      }
+
+      const response = await authApi.register({
+        fullName: formData.fullName,
+        email: formData.email,
+        phone: phone,
+        password: formData.password,
+        role: formData.role,
+      });
+
+      const { userId, email } = response.data.data;
+      
+      // Store user info for OTP verification
+      localStorage.setItem('pendingVerification', JSON.stringify({ 
+        userId, 
+        email,
+        phone: phone,
+        role: formData.role 
+      }));
+
       toast.success('Account created! Please verify your email.');
       navigate('/verify-otp');
-    }, 1500);
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Registration failed. Please try again.';
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
