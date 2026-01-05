@@ -208,7 +208,7 @@ const userSchema = new mongoose.Schema({
   // Preferences and Settings
   preferences: {
     language: { type: String, enum: ['en', 'ur'], default: 'en' },
-    currency: { type: String, enum: ['PKR', 'USD'], default: 'PKR' },
+    currency: { type: String, enum: ['PKR', 'USD', 'pkr', 'usd'], default: 'PKR' },
     notifications: {
       email: { type: Boolean, default: true },
       sms: { type: Boolean, default: true },

@@ -58,7 +58,7 @@ const AccountSettings: React.FC = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [currency, setCurrency] = useState('pkr');
+  const [currency, setCurrency] = useState('PKR');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Password change dialog
@@ -156,6 +156,9 @@ const AccountSettings: React.FC = () => {
           address: userData.location?.address || '',
         });
         setProfileImage(userData.avatar?.url || null);
+        if (userData.preferences?.currency) {
+          setCurrency(userData.preferences.currency);
+        }
         if (userData.preferences?.notifications) {
           setNotifications({
             email: userData.preferences.notifications.email ?? true,
@@ -720,8 +723,8 @@ const AccountSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pkr">PKR - Pakistani Rupee</SelectItem>
-                  <SelectItem value="usd">USD - US Dollar</SelectItem>
+                  <SelectItem value="PKR">PKR - Pakistani Rupee</SelectItem>
+                  <SelectItem value="USD">USD - US Dollar</SelectItem>
                 </SelectContent>
               </Select>
             </div>
