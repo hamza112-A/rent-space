@@ -1,11 +1,13 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { 
@@ -24,7 +26,9 @@ import {
   Users,
   Dog,
   Ship,
-  Plane
+  Plane,
+  LogOut,
+  Settings
 } from 'lucide-react';
 import { categories } from '@/lib/categories';
 
@@ -41,9 +45,16 @@ const categoryIcons: Record<string, React.ElementType> = {
 
 const Header: React.FC = () => {
   const { t, language, setLanguage, isRTL } = useLanguage();
+  const { user, isAuthenticated, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isScrolled, setIsScrolled] = React.useState(false);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
+  };
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -144,24 +155,59 @@ const Header: React.FC = () => {
             </DropdownMenu>
 
             {/* Dashboard Link */}
-            <Link to="/dashboard">
-              <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm" className="gap-2">
-                <LayoutDashboard className="w-4 h-4" />
-                Dashboard
-              </Button>
-            </Link>
+            {isAuthenticated && (
+              <Link to="/dashboard">
+                <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm" className="gap-2">
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Button>
+              </Link>
+            )}
 
             {/* Auth Buttons */}
-            <Link to="/login">
-              <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm">
-                {t.nav.login}
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button variant={isScrolled || !isHome ? 'default' : 'hero'} size="sm">
-                {t.nav.register}
-              </Button>
-            </Link>
+            {isAuthenticated ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm" className="gap-2">
+                    <User className="w-4 h-4" />
+                    {user?.fullName?.split(' ')[0] || 'Account'}
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard" className="flex items-center gap-2 cursor-pointer">
+                      <LayoutDashboard className="w-4 h-4" />
+                      Dashboard
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard?tab=settings" className="flex items-center gap-2 cursor-pointer">
+                      <Settings className="w-4 h-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 cursor-pointer text-destructive">
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm">
+                    {t.nav.login}
+                  </Button>
+                </Link>
+                <Link to="/register">
+                  <Button variant={isScrolled || !isHome ? 'default' : 'hero'} size="sm">
+                    {t.nav.register}
+                  </Button>
+                </Link>
+              </>
+            )}
 
             {/* Create Listing */}
             <Link to="/create-listing">
@@ -215,14 +261,16 @@ const Header: React.FC = () => {
                 >
                   {t.nav.listings}
                 </Link>
-                <Link
-                  to="/dashboard"
-                  className="px-4 py-3 rounded-xl hover:bg-muted transition-colors flex items-center gap-2"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
-                </Link>
+                {isAuthenticated && (
+                  <Link
+                    to="/dashboard"
+                    className="px-4 py-3 rounded-xl hover:bg-muted transition-colors flex items-center gap-2"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    Dashboard
+                  </Link>
+                )}
               </div>
 
               {/* Language Switcher */}
@@ -246,18 +294,31 @@ const Header: React.FC = () => {
               </div>
 
               {/* Auth Buttons */}
-              <div className="flex gap-2">
-                <Link to="/login" className="flex-1" onClick={() => setIsMenuOpen(false)}>
-                  <Button variant="outline" className="w-full">
-                    {t.nav.login}
+              {isAuthenticated ? (
+                <div className="flex flex-col gap-2">
+                  <div className="px-4 py-3 rounded-xl bg-muted">
+                    <p className="text-sm text-muted-foreground">Logged in as</p>
+                    <p className="font-medium">{user?.fullName}</p>
+                  </div>
+                  <Button variant="outline" className="w-full gap-2" onClick={() => { handleLogout(); setIsMenuOpen(false); }}>
+                    <LogOut className="w-4 h-4" />
+                    Logout
                   </Button>
-                </Link>
-                <Link to="/register" className="flex-1" onClick={() => setIsMenuOpen(false)}>
-                  <Button variant="default" className="w-full">
-                    {t.nav.register}
-                  </Button>
-                </Link>
-              </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Link to="/login" className="flex-1" onClick={() => setIsMenuOpen(false)}>
+                    <Button variant="outline" className="w-full">
+                      {t.nav.login}
+                    </Button>
+                  </Link>
+                  <Link to="/register" className="flex-1" onClick={() => setIsMenuOpen(false)}>
+                    <Button variant="default" className="w-full">
+                      {t.nav.register}
+                    </Button>
+                  </Link>
+                </div>
+              )}
 
               {/* Create Listing */}
               <Link to="/create-listing" onClick={() => setIsMenuOpen(false)}>
