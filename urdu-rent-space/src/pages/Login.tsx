@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +12,9 @@ import { Eye, EyeOff, Mail, Lock, ArrowLeft } from 'lucide-react';
 
 const Login: React.FC = () => {
   const { t } = useLanguage();
+  const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -20,16 +23,22 @@ const Login: React.FC = () => {
     rememberMe: false,
   });
 
+  // Get the redirect path from location state, or default to dashboard
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      await login(formData.email, formData.password);
+      toast.success('Login successful!');
+      navigate(from, { replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Login failed. Please try again.');
+    } finally {
       setIsLoading(false);
-      toast.success('Login successful! Redirecting...');
-      navigate('/');
-    }, 1500);
+    }
   };
 
   return (
