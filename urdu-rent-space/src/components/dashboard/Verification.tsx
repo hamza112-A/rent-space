@@ -44,17 +44,21 @@ const Verification: React.FC = () => {
       setLoading(true);
       setError(null);
       const response = await userApi.getVerificationStatus();
+      console.log('Verification status response:', response.data);
       setVerificationStatus(response.data?.data || null);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch verification status:', err);
       // Use user data as fallback
       if (user) {
+        console.log('Using fallback user data:', user);
         setVerificationStatus({
-          email: { verified: user.isEmailVerified },
-          phone: { verified: user.isPhoneVerified },
+          email: { verified: user.isEmailVerified || false },
+          phone: { verified: user.isPhoneVerified || false },
           identity: { verified: false, status: 'not_submitted' },
           biometric: { verified: false, status: 'not_submitted' },
         });
+      } else {
+        setError('Failed to load verification status');
       }
     } finally {
       setLoading(false);
@@ -81,9 +85,9 @@ const Verification: React.FC = () => {
         completedAt: status?.phone?.verifiedAt,
       },
       {
-        id: 'cnic',
-        label: 'CNIC Verification',
-        description: 'Upload your National ID card',
+        id: 'identity',
+        label: 'ID Verification',
+        description: 'Upload your National ID card (CNIC/Passport)',
         icon: CreditCard,
         status: status?.identity?.verified
           ? 'verified'
@@ -95,9 +99,9 @@ const Verification: React.FC = () => {
         completedAt: status?.identity?.verifiedAt,
       },
       {
-        id: 'selfie',
+        id: 'biometric',
         label: 'Photo Verification',
-        description: 'Take a selfie holding your ID',
+        description: 'Take a selfie for identity confirmation',
         icon: Camera,
         status: status?.biometric?.verified
           ? 'verified'
