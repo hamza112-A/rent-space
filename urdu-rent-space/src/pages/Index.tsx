@@ -44,13 +44,13 @@ const categoryIcons: Record<string, React.ElementType> = {
 interface Listing {
   _id: string;
   title: string;
-  category: { name: string } | string;
-  pricing: { basePrice: number; priceType: string };
-  location: { city: string; area: string };
+  category: string;
+  pricing: { daily?: number; hourly?: number; weekly?: number; monthly?: number };
+  location: { city: string; area?: string };
   images: { url: string }[];
-  averageRating?: number;
-  reviewCount?: number;
-  owner?: { isVerified?: boolean };
+  rating?: { average: number; count: number };
+  verified?: boolean;
+  availability?: { instantBook?: boolean };
 }
 
 const Index: React.FC = () => {
@@ -193,7 +193,7 @@ const Index: React.FC = () => {
                           No Image
                         </div>
                       )}
-                      {listing.owner?.isVerified && (
+                      {listing.verified && (
                         <Badge className="absolute top-3 left-3 gap-1 bg-gradient-to-r from-amber-400 to-orange-400">
                           <CheckCircle2 className="w-3 h-3" /> {t.listing.verified}
                         </Badge>
@@ -207,13 +207,13 @@ const Index: React.FC = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="text-lg font-bold text-primary">
-                            {t.common.pkr} {(listing.pricing?.basePrice || 0).toLocaleString()}
+                            {t.common.pkr} {(listing.pricing?.daily || listing.pricing?.hourly || 0).toLocaleString()}
                           </span>
-                          <span className="text-sm text-muted-foreground">/{listing.pricing?.priceType || 'day'}</span>
+                          <span className="text-sm text-muted-foreground">/{listing.pricing?.daily ? 'day' : 'hour'}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                          <span className="font-medium">{listing.averageRating?.toFixed(1) || '5.0'}</span>
+                          <span className="font-medium">{listing.rating?.average?.toFixed(1) || '5.0'}</span>
                         </div>
                       </div>
                     </div>

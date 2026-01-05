@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -8,7 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
+import { Skeleton } from '@/components/ui/skeleton';
 import { categories, getCategoryById } from '@/lib/categories';
+import { listingApi } from '@/lib/api';
 import {
   Search,
   MapPin,
@@ -55,17 +57,18 @@ const categoryIcons: Record<string, React.ElementType> = {
   air: Plane,
 };
 
-// Mock listings data
-const mockListings = [
-  { id: '1', title: 'Luxury Apartment in DHA Phase 5', category: 'property', subcategory: 'apartments', price: 85000, priceType: 'month', location: 'Karachi', rating: 4.9, reviews: 47, image: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400', verified: true, instantBook: true },
-  { id: '2', title: 'Modern 3BR House with Garden', category: 'property', subcategory: 'houses', price: 120000, priceType: 'month', location: 'Lahore', rating: 4.8, reviews: 32, image: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400', verified: true, instantBook: false },
-  { id: '3', title: 'Toyota Corolla GLI 2023', category: 'vehicles', subcategory: 'cars', price: 8500, priceType: 'day', location: 'Islamabad', rating: 5.0, reviews: 18, image: 'https://images.unsplash.com/photo-1590362891991-f776e747a588?w=400', verified: true, instantBook: true },
-  { id: '4', title: 'Honda Civic RS Turbo', category: 'vehicles', subcategory: 'cars', price: 12000, priceType: 'day', location: 'Karachi', rating: 4.7, reviews: 56, image: 'https://images.unsplash.com/photo-1606611013016-969c19ba27bb?w=400', verified: false, instantBook: true },
-  { id: '5', title: 'Wedding Sherwani Premium', category: 'clothes', subcategory: 'wedding', price: 15000, priceType: 'day', location: 'Lahore', rating: 4.9, reviews: 23, image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400', verified: true, instantBook: false },
-  { id: '6', title: 'Designer Bridal Lehnga', category: 'clothes', subcategory: 'wedding', price: 25000, priceType: 'day', location: 'Karachi', rating: 5.0, reviews: 41, image: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400', verified: true, instantBook: true },
-  { id: '7', title: 'Professional Camera Kit Sony A7', category: 'equipment', subcategory: 'electronics', price: 5000, priceType: 'day', location: 'Islamabad', rating: 4.8, reviews: 67, image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400', verified: true, instantBook: true },
-  { id: '8', title: 'DJ Sound System Complete', category: 'equipment', subcategory: 'electronics', price: 15000, priceType: 'day', location: 'Lahore', rating: 4.6, reviews: 29, image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400', verified: false, instantBook: false },
-];
+interface Listing {
+  _id: string;
+  title: string;
+  category: string;
+  subcategory: string;
+  pricing: { daily?: number; hourly?: number; weekly?: number; monthly?: number };
+  location: { city: string; area?: string };
+  images: { url: string }[];
+  rating?: { average: number; count: number };
+  verified?: boolean;
+  availability?: { instantBook?: boolean };
+}
 
 const CategoryPage: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
@@ -74,15 +77,37 @@ const CategoryPage: React.FC = () => {
   const [priceRange, setPriceRange] = useState([0, 200000]);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState('newest');
 
   const category = categoryId ? getCategoryById(categoryId) : null;
   const CategoryIcon = category ? categoryIcons[category.id] || Building2 : Building2;
 
-  // Filter listings by category
-  const filteredListings = mockListings.filter((listing) => {
-    if (categoryId && listing.category !== categoryId) return false;
-    if (selectedSubcategory && listing.subcategory !== selectedSubcategory) return false;
-    if (listing.price < priceRange[0] || listing.price > priceRange[1]) return false;
+  useEffect(() => {
+    const fetchListings = async () => {
+      try {
+        setLoading(true);
+        const params: any = { limit: 50 };
+        if (categoryId) params.category = categoryId;
+        if (selectedSubcategory) params.subcategory = selectedSubcategory;
+        if (sortBy) params.sort = sortBy;
+        
+        const response = await listingApi.search(params);
+        setListings(response.data?.data || []);
+      } catch (err) {
+        console.error('Failed to fetch listings:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchListings();
+  }, [categoryId, selectedSubcategory, sortBy]);
+
+  // Filter listings by price range (client-side)
+  const filteredListings = listings.filter((listing) => {
+    const price = listing.pricing?.daily || listing.pricing?.hourly || 0;
+    if (price < priceRange[0] || price > priceRange[1]) return false;
     return true;
   });
 
@@ -249,15 +274,14 @@ const CategoryPage: React.FC = () => {
                     </SheetContent>
                   </Sheet>
 
-                  <Select defaultValue="relevance">
+                  <Select value={sortBy} onValueChange={setSortBy}>
                     <SelectTrigger className="w-44">
                       <SelectValue placeholder={t.filters.sortBy} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="relevance">{t.filters.relevance}</SelectItem>
-                      <SelectItem value="price_asc">{t.filters.priceLowHigh}</SelectItem>
-                      <SelectItem value="price_desc">{t.filters.priceHighLow}</SelectItem>
                       <SelectItem value="newest">{t.filters.newest}</SelectItem>
+                      <SelectItem value="price_low">{t.filters.priceLowHigh}</SelectItem>
+                      <SelectItem value="price_high">{t.filters.priceHighLow}</SelectItem>
                       <SelectItem value="rating">{t.filters.topRated}</SelectItem>
                     </SelectContent>
                   </Select>
@@ -282,44 +306,71 @@ const CategoryPage: React.FC = () => {
               </div>
 
               {/* Listings Grid */}
-              <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' : 'space-y-4'}>
-                {filteredListings.map((listing) => (
-                  <Link key={listing.id} to={`/listing/${listing.id}`}>
-                    <Card className={`overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${viewMode === 'list' ? 'flex' : ''}`}>
-                      <div className={`relative ${viewMode === 'list' ? 'w-48 flex-shrink-0' : 'h-48'}`}>
-                        <img src={listing.image} alt={listing.title} className="w-full h-full object-cover" />
-                        {listing.verified && (
-                          <Badge className="absolute top-3 left-3 gap-1 bg-gradient-to-r from-amber-400 to-orange-400">
-                            <CheckCircle2 className="w-3 h-3" /> {t.listing.verified}
-                          </Badge>
-                        )}
-                        {listing.instantBook && (
-                          <Badge variant="secondary" className="absolute top-3 right-3">
-                            {t.listing.instantBook}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="p-4 flex-1">
-                        <h3 className="font-semibold text-foreground mb-2 line-clamp-1">{listing.title}</h3>
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
-                          <MapPin className="w-4 h-4" /> {listing.location}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-lg font-bold text-primary">PKR {listing.price.toLocaleString()}</span>
-                            <span className="text-sm text-muted-foreground">/{listing.priceType}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                            <span className="font-medium">{listing.rating}</span>
-                            <span className="text-muted-foreground text-sm">({listing.reviews})</span>
-                          </div>
-                        </div>
+              {loading ? (
+                <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' : 'space-y-4'}>
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <Card key={i} className="overflow-hidden">
+                      <Skeleton className="h-48 w-full" />
+                      <div className="p-4 space-y-2">
+                        <Skeleton className="h-5 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-6 w-1/3" />
                       </div>
                     </Card>
-                  </Link>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' : 'space-y-4'}>
+                  {filteredListings.map((listing) => {
+                    const price = listing.pricing?.daily || listing.pricing?.hourly || 0;
+                    const priceType = listing.pricing?.daily ? 'day' : 'hour';
+                    return (
+                      <Link key={listing._id} to={`/listing/${listing._id}`}>
+                        <Card className={`overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${viewMode === 'list' ? 'flex' : ''}`}>
+                          <div className={`relative ${viewMode === 'list' ? 'w-48 flex-shrink-0' : 'h-48'}`}>
+                            {listing.images?.[0]?.url ? (
+                              <img src={listing.images[0].url} alt={listing.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
+                                No Image
+                              </div>
+                            )}
+                            {listing.verified && (
+                              <Badge className="absolute top-3 left-3 gap-1 bg-gradient-to-r from-amber-400 to-orange-400">
+                                <CheckCircle2 className="w-3 h-3" /> {t.listing.verified}
+                              </Badge>
+                            )}
+                            {listing.availability?.instantBook && (
+                              <Badge variant="secondary" className="absolute top-3 right-3">
+                                {t.listing.instantBook}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="p-4 flex-1">
+                            <h3 className="font-semibold text-foreground mb-2 line-clamp-1">{listing.title}</h3>
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
+                              <MapPin className="w-4 h-4" /> {listing.location?.city || 'Pakistan'}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-lg font-bold text-primary">PKR {price.toLocaleString()}</span>
+                                <span className="text-sm text-muted-foreground">/{priceType}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                                <span className="font-medium">{listing.rating?.average?.toFixed(1) || '5.0'}</span>
+                                {listing.rating?.count && (
+                                  <span className="text-muted-foreground text-sm">({listing.rating.count})</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
 
               {filteredListings.length === 0 && (
                 <div className="text-center py-16">
