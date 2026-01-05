@@ -35,7 +35,10 @@ interface Booking {
   };
   startDate: string;
   endDate: string;
-  totalPrice: number;
+  totalPrice?: number;
+  pricing?: {
+    totalAmount: number;
+  };
   status: string;
   createdAt: string;
 }
@@ -118,6 +121,10 @@ const MyBookings: React.FC = () => {
 
   const formatCurrency = (amount: number) => {
     return `PKR ${(amount || 0).toLocaleString()}`;
+  };
+
+  const getTotalPrice = (booking: Booking) => {
+    return booking.pricing?.totalAmount || booking.totalPrice || 0;
   };
 
   const getTimeAgo = (dateString: string) => {
@@ -251,7 +258,7 @@ const MyBookings: React.FC = () => {
                         <div className="flex flex-col items-end justify-between">
                           <div className="text-right">
                             <p className="text-lg font-bold text-foreground">
-                              {formatCurrency(booking.totalPrice)}
+                              {formatCurrency(getTotalPrice(booking))}
                             </p>
                             <p className="text-xs text-muted-foreground">Total</p>
                           </div>
@@ -352,7 +359,7 @@ const MyBookings: React.FC = () => {
                         <div className="flex flex-col items-end justify-between">
                           <div className="text-right">
                             <p className="text-lg font-bold text-foreground">
-                              {formatCurrency(booking.totalPrice)}
+                              {formatCurrency(getTotalPrice(booking))}
                             </p>
                             <p className="text-xs text-muted-foreground">Total</p>
                           </div>
