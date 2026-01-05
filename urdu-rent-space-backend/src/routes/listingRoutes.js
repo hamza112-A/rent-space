@@ -14,28 +14,27 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
   if (category) query.category = category;
   if (city) query['location.city'] = new RegExp(city, 'i');
   if (minPrice || maxPrice) {
-    query['pricing.basePrice'] = {};
-    if (minPrice) query['pricing.basePrice'].$gte = Number(minPrice);
-    if (maxPrice) query['pricing.basePrice'].$lte = Number(maxPrice);
+    query['pricing.daily'] = {};
+    if (minPrice) query['pricing.daily'].$gte = Number(minPrice);
+    if (maxPrice) query['pricing.daily'].$lte = Number(maxPrice);
   }
   if (search) {
     query.$or = [
       { title: new RegExp(search, 'i') },
-      { 'title_ur': new RegExp(search, 'i') },
+      { titleUrdu: new RegExp(search, 'i') },
       { description: new RegExp(search, 'i') }
     ];
   }
 
   const sortOptions = {
     'newest': { createdAt: -1 },
-    'price_low': { 'pricing.basePrice': 1 },
-    'price_high': { 'pricing.basePrice': -1 },
-    'rating': { averageRating: -1 }
+    'price_low': { 'pricing.daily': 1 },
+    'price_high': { 'pricing.daily': -1 },
+    'rating': { 'rating.average': -1 }
   };
 
   const listings = await Listing.find(query)
-    .populate('owner', 'name avatar verificationLevel')
-    .populate('category', 'name name_ur icon')
+    .populate('owner', 'fullName profileImage verificationLevel')
     .sort(sortOptions[sort] || { createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(Number(limit));
@@ -52,29 +51,61 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
 // @route   GET /api/v1/listings/:id
 router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   const listing = await Listing.findById(req.params.id)
-    .populate('owner', 'name avatar phone verificationLevel createdAt')
-    .populate('category', 'name name_ur icon');
+    .populate('owner', 'fullName profileImage phone verificationLevel createdAt isEmailVerified');
   
   if (!listing) {
     return res.status(404).json({ success: false, message: 'Listing not found' });
   }
 
   // Increment views
-  listing.views += 1;
-  await listing.save();
+  listing.stats.views += 1;
+  await listing.save({ validateBeforeSave: false });
 
   res.json({ success: true, data: listing });
 }));
 
 // @route   POST /api/v1/listings
 router.post('/', protect, upload.array('images', 10), asyncHandler(async (req, res) => {
+  // Parse JSON fields that were stringified in FormData
+  const jsonFields = ['location', 'pricing', 'availability', 'policies', 'specifications'];
+  jsonFields.forEach(field => {
+    if (req.body[field] && typeof req.body[field] === 'string') {
+      try {
+        req.body[field] = JSON.parse(req.body[field]);
+      } catch (e) {
+        // Keep as string if parsing fails
+      }
+    }
+  });
+
   req.body.owner = req.user._id;
   
+  // Handle uploaded files
   if (req.files?.length) {
-    req.body.images = req.files.map(file => ({
+    req.body.images = req.files.map((file, index) => ({
+      public_id: file.filename,
       url: file.path,
-      publicId: file.filename
+      order: index
     }));
+  }
+  
+  // Handle mock image URLs from frontend (temporary)
+  if (req.body.imageUrls) {
+    try {
+      const imageUrls = typeof req.body.imageUrls === 'string' 
+        ? JSON.parse(req.body.imageUrls) 
+        : req.body.imageUrls;
+      if (Array.isArray(imageUrls) && imageUrls.length > 0 && !req.body.images?.length) {
+        req.body.images = imageUrls.map((url, index) => ({
+          public_id: `mock_${Date.now()}_${index}`,
+          url: url,
+          order: index
+        }));
+      }
+      delete req.body.imageUrls;
+    } catch (e) {
+      // Ignore parsing errors
+    }
   }
 
   const listing = await Listing.create(req.body);
@@ -94,7 +125,12 @@ router.put('/:id', protect, upload.array('images', 10), asyncHandler(async (req,
   }
 
   if (req.files?.length) {
-    const newImages = req.files.map(file => ({ url: file.path, publicId: file.filename }));
+    const existingCount = listing.images?.length || 0;
+    const newImages = req.files.map((file, index) => ({
+      public_id: file.filename,
+      url: file.path,
+      order: existingCount + index
+    }));
     req.body.images = [...(listing.images || []), ...newImages];
   }
 
