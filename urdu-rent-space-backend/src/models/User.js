@@ -158,6 +158,32 @@ const userSchema = new mongoose.Schema({
     paymentMethod: String
   },
 
+  // Payment Methods
+  paymentMethods: [{
+    type: {
+      type: String,
+      enum: ['jazzcash', 'easypaisa', 'card', 'bank'],
+      required: true
+    },
+    details: {
+      // For mobile wallets (JazzCash, Easypaisa)
+      mobileNumber: String,
+      accountTitle: String,
+      // For cards
+      cardNumber: String, // Masked: ****1234
+      cardName: String,
+      expiryMonth: String,
+      expiryYear: String,
+      cardBrand: String, // visa, mastercard
+      // For bank accounts
+      bankName: String,
+      accountNumber: String, // Masked
+      branchCode: String
+    },
+    isDefault: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  }],
+
   // Statistics and Ratings
   stats: {
     totalListings: { type: Number, default: 0 },
@@ -197,6 +223,15 @@ const userSchema = new mongoose.Schema({
   },
 
   // Security
+  twoFactorAuth: {
+    enabled: { type: Boolean, default: false },
+    secret: { type: String, select: false },
+    backupCodes: [{ 
+      code: String, 
+      used: { type: Boolean, default: false } 
+    }],
+    enabledAt: Date
+  },
   refreshTokens: [{
     token: String,
     createdAt: { type: Date, default: Date.now },

@@ -46,7 +46,11 @@ const updateProfile = asyncHandler(async (req, res, next) => {
     try {
       // Delete old avatar if exists
       if (user.avatar && user.avatar.public_id) {
-        await deleteFromCloudinary(user.avatar.public_id);
+        try {
+          await deleteFromCloudinary(user.avatar.public_id);
+        } catch (deleteError) {
+          console.warn('Failed to delete old avatar:', deleteError.message);
+        }
       }
 
       // Upload new avatar
@@ -54,7 +58,8 @@ const updateProfile = asyncHandler(async (req, res, next) => {
         folder: 'avatars',
         width: 300,
         height: 300,
-        crop: 'fill'
+        crop: 'fill',
+        resource_type: 'image'
       });
 
       avatarData = {
@@ -62,7 +67,8 @@ const updateProfile = asyncHandler(async (req, res, next) => {
         url: result.secure_url
       };
     } catch (error) {
-      return next(new ErrorResponse('Avatar upload failed', 500));
+      console.error('Avatar upload error:', error);
+      return next(new ErrorResponse(`Avatar upload failed: ${error.message}`, 500));
     }
   }
 

@@ -94,18 +94,37 @@ export const authApi = {
     api.post('/auth/change-password', data),
   deleteAccount: (password: string) =>
     api.delete('/auth/delete-account', { data: { password } }),
+  // 2FA
+  get2FAStatus: () => api.get('/auth/2fa/status'),
+  setup2FA: () => api.post('/auth/2fa/setup'),
+  verify2FA: (token: string) => api.post('/auth/2fa/verify', { token }),
+  disable2FA: (data: { password: string; token?: string }) => api.post('/auth/2fa/disable', data),
+  regenerateBackupCodes: (password: string) => api.post('/auth/2fa/backup-codes', { password }),
 };
 
 // User API
 export const userApi = {
   getProfile: () => api.get('/users/profile'),
-  updateProfile: (data: FormData | object) =>
-    api.patch('/users/profile', data),
+  updateProfile: (data: FormData | object) => {
+    // If data is FormData, don't set Content-Type header (let browser set it with boundary)
+    if (data instanceof FormData) {
+      return api.patch('/users/profile', data, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+    }
+    return api.patch('/users/profile', data);
+  },
   getVerificationStatus: () => api.get('/users/verification'),
   uploadIDDocument: (data: FormData) =>
-    api.post('/users/verification/id', data),
+    api.post('/users/verification/id', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   verifyBiometric: (data: FormData) =>
-    api.post('/users/verification/biometric', data),
+    api.post('/users/verification/biometric', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   getUserStats: () => api.get('/users/stats'),
   getPublicProfile: (userId: string) => api.get(`/users/${userId}`),
   getReviews: (userId: string, params?: { page?: number; limit?: number }) =>
@@ -124,8 +143,12 @@ export const categoryApi = {
 
 // Listings API
 export const listingApi = {
-  create: (data: FormData) => api.post('/listings', data),
-  update: (listingId: string, data: FormData) => api.put(`/listings/${listingId}`, data),
+  create: (data: FormData) => api.post('/listings', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  update: (listingId: string, data: FormData) => api.put(`/listings/${listingId}`, data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
   delete: (listingId: string) => api.delete(`/listings/${listingId}`),
   getById: (listingId: string) => api.get(`/listings/${listingId}`),
   getMyListings: (params?: { page?: number; limit?: number; status?: string }) =>
@@ -154,7 +177,9 @@ export const listingApi = {
   updateAvailability: (listingId: string, data: { dates: string[]; available: boolean }) =>
     api.patch(`/listings/${listingId}/availability`, data),
   uploadMedia: (listingId: string, data: FormData) =>
-    api.post(`/listings/${listingId}/media`, data),
+    api.post(`/listings/${listingId}/media`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   deleteMedia: (listingId: string, mediaId: string) =>
     api.delete(`/listings/${listingId}/media/${mediaId}`),
   toggleFavorite: (listingId: string) => api.post(`/listings/${listingId}/favorite`),
@@ -193,6 +218,12 @@ export const paymentApi = {
   verify: (paymentId: string) => api.get(`/payments/${paymentId}/verify`),
   getHistory: (params?: { page?: number; limit?: number }) =>
     api.get('/payments/history', { params }),
+  // Payment methods management
+  getMethods: () => api.get('/payments/methods'),
+  addMethod: (data: { type: string; details: Record<string, string> }) =>
+    api.post('/payments/methods', data),
+  deleteMethod: (methodId: string) => api.delete(`/payments/methods/${methodId}`),
+  setDefaultMethod: (methodId: string) => api.put(`/payments/methods/${methodId}/default`),
 };
 
 // Subscription API

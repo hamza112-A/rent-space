@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   User,
   Mail,
@@ -39,10 +40,14 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
+  Plus,
+  Smartphone,
+  Building,
+  Star,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { userApi, authApi } from '@/lib/api';
+import { userApi, authApi, paymentApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 const AccountSettings: React.FC = () => {
@@ -75,6 +80,30 @@ const AccountSettings: React.FC = () => {
   const [deletePassword, setDeletePassword] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
 
+  // Payment methods
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [addingPayment, setAddingPayment] = useState(false);
+  const [newPaymentMethod, setNewPaymentMethod] = useState({
+    type: 'jazzcash',
+    mobileNumber: '',
+    accountTitle: '',
+    cardNumber: '',
+    cardName: '',
+    expiry: '',
+    bankName: '',
+    accountNumber: '',
+  });
+
+  // 2FA state
+  const [twoFAStatus, setTwoFAStatus] = useState<{ enabled: boolean; backupCodesRemaining: number }>({ enabled: false, backupCodesRemaining: 0 });
+  const [twoFADialogOpen, setTwoFADialogOpen] = useState(false);
+  const [twoFAStep, setTwoFAStep] = useState<'setup' | 'verify' | 'backup' | 'disable'>('setup');
+  const [twoFAData, setTwoFAData] = useState<{ qrCode: string; secret: string; backupCodes: string[] }>({ qrCode: '', secret: '', backupCodes: [] });
+  const [twoFAToken, setTwoFAToken] = useState('');
+  const [twoFAPassword, setTwoFAPassword] = useState('');
+  const [twoFALoading, setTwoFALoading] = useState(false);
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -91,7 +120,27 @@ const AccountSettings: React.FC = () => {
 
   useEffect(() => {
     fetchUserProfile();
+    fetchPaymentMethods();
+    fetch2FAStatus();
   }, []);
+
+  const fetch2FAStatus = async () => {
+    try {
+      const response = await authApi.get2FAStatus();
+      setTwoFAStatus(response.data?.data || { enabled: false, backupCodesRemaining: 0 });
+    } catch (err) {
+      console.error('Failed to fetch 2FA status:', err);
+    }
+  };
+
+  const fetchPaymentMethods = async () => {
+    try {
+      const response = await paymentApi.getMethods();
+      setPaymentMethods(response.data?.data || []);
+    } catch (err) {
+      console.error('Failed to fetch payment methods:', err);
+    }
+  };
 
   const fetchUserProfile = async () => {
     try {
@@ -241,6 +290,196 @@ const AccountSettings: React.FC = () => {
       toast.error(err.response?.data?.message || 'Failed to delete account');
     } finally {
       setDeletingAccount(false);
+    }
+  };
+
+  const handleAddPaymentMethod = async () => {
+    try {
+      setAddingPayment(true);
+      
+      let details: Record<string, string> = {};
+      
+      if (newPaymentMethod.type === 'jazzcash' || newPaymentMethod.type === 'easypaisa') {
+        if (!newPaymentMethod.mobileNumber) {
+          toast.error('Mobile number is required');
+          return;
+        }
+        details = {
+          mobileNumber: newPaymentMethod.mobileNumber,
+          accountTitle: newPaymentMethod.accountTitle,
+        };
+      } else if (newPaymentMethod.type === 'card') {
+        if (!newPaymentMethod.cardNumber || !newPaymentMethod.cardName || !newPaymentMethod.expiry) {
+          toast.error('Please fill all card details');
+          return;
+        }
+        const [expiryMonth, expiryYear] = newPaymentMethod.expiry.split('/');
+        details = {
+          cardNumber: newPaymentMethod.cardNumber,
+          cardName: newPaymentMethod.cardName,
+          expiryMonth,
+          expiryYear,
+        };
+      } else if (newPaymentMethod.type === 'bank') {
+        if (!newPaymentMethod.bankName || !newPaymentMethod.accountNumber) {
+          toast.error('Please fill all bank details');
+          return;
+        }
+        details = {
+          bankName: newPaymentMethod.bankName,
+          accountNumber: newPaymentMethod.accountNumber,
+          accountTitle: newPaymentMethod.accountTitle,
+        };
+      }
+
+      await paymentApi.addMethod({
+        type: newPaymentMethod.type,
+        details,
+      });
+
+      toast.success('Payment method added');
+      setPaymentDialogOpen(false);
+      setNewPaymentMethod({
+        type: 'jazzcash',
+        mobileNumber: '',
+        accountTitle: '',
+        cardNumber: '',
+        cardName: '',
+        expiry: '',
+        bankName: '',
+        accountNumber: '',
+      });
+      fetchPaymentMethods();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to add payment method');
+    } finally {
+      setAddingPayment(false);
+    }
+  };
+
+  const handleDeletePaymentMethod = async (methodId: string) => {
+    try {
+      await paymentApi.deleteMethod(methodId);
+      toast.success('Payment method removed');
+      fetchPaymentMethods();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to remove payment method');
+    }
+  };
+
+  const handleSetDefaultPaymentMethod = async (methodId: string) => {
+    try {
+      await paymentApi.setDefaultMethod(methodId);
+      toast.success('Default payment method updated');
+      fetchPaymentMethods();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update default method');
+    }
+  };
+
+  const getPaymentMethodIcon = (type: string) => {
+    switch (type) {
+      case 'jazzcash':
+      case 'easypaisa':
+        return <Smartphone className="h-5 w-5" />;
+      case 'card':
+        return <CreditCard className="h-5 w-5" />;
+      case 'bank':
+        return <Building className="h-5 w-5" />;
+      default:
+        return <CreditCard className="h-5 w-5" />;
+    }
+  };
+
+  const getPaymentMethodLabel = (method: any) => {
+    switch (method.type) {
+      case 'jazzcash':
+        return `JazzCash - ${method.details?.mobileNumber || ''}`;
+      case 'easypaisa':
+        return `Easypaisa - ${method.details?.mobileNumber || ''}`;
+      case 'card':
+        return `Card ending in ${method.details?.cardNumber?.slice(-4) || '****'}`;
+      case 'bank':
+        return `${method.details?.bankName || 'Bank'} - ${method.details?.accountNumber || ''}`;
+      default:
+        return method.type;
+    }
+  };
+
+  // 2FA handlers
+  const handleSetup2FA = async () => {
+    try {
+      setTwoFALoading(true);
+      const response = await authApi.setup2FA();
+      setTwoFAData({
+        qrCode: response.data?.data?.qrCode || '',
+        secret: response.data?.data?.secret || '',
+        backupCodes: [],
+      });
+      setTwoFAStep('verify');
+      setTwoFADialogOpen(true);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to setup 2FA');
+    } finally {
+      setTwoFALoading(false);
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    if (!twoFAToken || twoFAToken.length !== 6) {
+      toast.error('Please enter a valid 6-digit code');
+      return;
+    }
+
+    try {
+      setTwoFALoading(true);
+      const response = await authApi.verify2FA(twoFAToken);
+      setTwoFAData(prev => ({
+        ...prev,
+        backupCodes: response.data?.data?.backupCodes || [],
+      }));
+      setTwoFAStep('backup');
+      setTwoFAStatus({ enabled: true, backupCodesRemaining: 10 });
+      toast.success('2FA enabled successfully!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Invalid verification code');
+    } finally {
+      setTwoFALoading(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    if (!twoFAPassword) {
+      toast.error('Please enter your password');
+      return;
+    }
+
+    try {
+      setTwoFALoading(true);
+      await authApi.disable2FA({ password: twoFAPassword, token: twoFAToken || undefined });
+      setTwoFAStatus({ enabled: false, backupCodesRemaining: 0 });
+      setTwoFADialogOpen(false);
+      setTwoFAPassword('');
+      setTwoFAToken('');
+      toast.success('2FA disabled successfully');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to disable 2FA');
+    } finally {
+      setTwoFALoading(false);
+    }
+  };
+
+  const handleOpen2FADialog = () => {
+    if (twoFAStatus.enabled) {
+      setTwoFAStep('disable');
+    } else {
+      setTwoFAStep('setup');
+    }
+    setTwoFAToken('');
+    setTwoFAPassword('');
+    setTwoFADialogOpen(true);
+    if (!twoFAStatus.enabled) {
+      handleSetup2FA();
     }
   };
 
@@ -509,12 +748,32 @@ const AccountSettings: React.FC = () => {
           </div>
           <Separator />
           <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-foreground">Two-Factor Authentication</p>
-              <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
+            <div className="flex items-center gap-3">
+              <div>
+                <p className="font-medium text-foreground">Two-Factor Authentication</p>
+                <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
+              </div>
+              {twoFAStatus.enabled && (
+                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                  Enabled
+                </Badge>
+              )}
             </div>
-            <Button variant="outline" disabled>Coming Soon</Button>
+            <Button 
+              variant={twoFAStatus.enabled ? "destructive" : "outline"} 
+              onClick={handleOpen2FADialog}
+              disabled={twoFALoading}
+            >
+              {twoFALoading ? 'Loading...' : twoFAStatus.enabled ? 'Disable 2FA' : 'Enable 2FA'}
+            </Button>
           </div>
+          {twoFAStatus.enabled && twoFAStatus.backupCodesRemaining < 3 && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-sm text-amber-600">
+                ⚠️ You have only {twoFAStatus.backupCodesRemaining} backup codes remaining. Consider regenerating them.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -528,8 +787,58 @@ const AccountSettings: React.FC = () => {
           <CardDescription>Manage your payment and payout methods</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-muted-foreground text-center py-4">No payment methods added yet</p>
-          <Button variant="outline" className="w-full">Add Payment Method</Button>
+          {paymentMethods.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4">No payment methods added yet</p>
+          ) : (
+            <div className="space-y-3">
+              {paymentMethods.map((method) => (
+                <div
+                  key={method._id}
+                  className="flex items-center justify-between p-4 rounded-lg border bg-muted/30"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-primary/10 text-primary">
+                      {getPaymentMethodIcon(method.type)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{getPaymentMethodLabel(method)}</p>
+                      {method.details?.accountTitle && (
+                        <p className="text-sm text-muted-foreground">{method.details.accountTitle}</p>
+                      )}
+                    </div>
+                    {method.isDefault && (
+                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                        <Star className="h-3 w-3 mr-1" /> Default
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!method.isDefault && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSetDefaultPaymentMethod(method._id)}
+                      >
+                        Set Default
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeletePaymentMethod(method._id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button variant="outline" className="w-full gap-2" onClick={() => setPaymentDialogOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add Payment Method
+          </Button>
         </CardContent>
       </Card>
 
@@ -672,6 +981,287 @@ const AccountSettings: React.FC = () => {
             <Button variant="destructive" onClick={handleDeleteAccount} disabled={deletingAccount}>
               {deletingAccount ? 'Deleting...' : 'Delete My Account'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Payment Method Dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Payment Method</DialogTitle>
+            <DialogDescription>
+              Add a new payment method for transactions
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-3">
+              <Label>Payment Type</Label>
+              <RadioGroup
+                value={newPaymentMethod.type}
+                onValueChange={(value) => setNewPaymentMethod(prev => ({ ...prev, type: value }))}
+                className="grid grid-cols-2 gap-3"
+              >
+                <Label
+                  htmlFor="jazzcash"
+                  className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${
+                    newPaymentMethod.type === 'jazzcash' ? 'border-primary bg-primary/5' : 'border-border'
+                  }`}
+                >
+                  <RadioGroupItem value="jazzcash" id="jazzcash" />
+                  <Smartphone className="h-4 w-4 text-red-500" />
+                  <span>JazzCash</span>
+                </Label>
+                <Label
+                  htmlFor="easypaisa"
+                  className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${
+                    newPaymentMethod.type === 'easypaisa' ? 'border-primary bg-primary/5' : 'border-border'
+                  }`}
+                >
+                  <RadioGroupItem value="easypaisa" id="easypaisa" />
+                  <Smartphone className="h-4 w-4 text-green-500" />
+                  <span>Easypaisa</span>
+                </Label>
+                <Label
+                  htmlFor="card"
+                  className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${
+                    newPaymentMethod.type === 'card' ? 'border-primary bg-primary/5' : 'border-border'
+                  }`}
+                >
+                  <RadioGroupItem value="card" id="card" />
+                  <CreditCard className="h-4 w-4 text-blue-500" />
+                  <span>Card</span>
+                </Label>
+                <Label
+                  htmlFor="bank"
+                  className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-all ${
+                    newPaymentMethod.type === 'bank' ? 'border-primary bg-primary/5' : 'border-border'
+                  }`}
+                >
+                  <RadioGroupItem value="bank" id="bank" />
+                  <Building className="h-4 w-4 text-purple-500" />
+                  <span>Bank</span>
+                </Label>
+              </RadioGroup>
+            </div>
+
+            {/* Mobile Wallet Fields */}
+            {(newPaymentMethod.type === 'jazzcash' || newPaymentMethod.type === 'easypaisa') && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mobileNumber">Mobile Number</Label>
+                  <Input
+                    id="mobileNumber"
+                    placeholder="03XX XXXXXXX"
+                    value={newPaymentMethod.mobileNumber}
+                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, mobileNumber: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="accountTitle">Account Title (Optional)</Label>
+                  <Input
+                    id="accountTitle"
+                    placeholder="Account holder name"
+                    value={newPaymentMethod.accountTitle}
+                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountTitle: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Card Fields */}
+            {newPaymentMethod.type === 'card' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cardNumber">Card Number</Label>
+                  <Input
+                    id="cardNumber"
+                    placeholder="1234 5678 9012 3456"
+                    value={newPaymentMethod.cardNumber}
+                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, cardNumber: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cardName">Name on Card</Label>
+                  <Input
+                    id="cardName"
+                    placeholder="AHMED KHAN"
+                    value={newPaymentMethod.cardName}
+                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, cardName: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="expiry">Expiry Date</Label>
+                  <Input
+                    id="expiry"
+                    placeholder="MM/YY"
+                    value={newPaymentMethod.expiry}
+                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, expiry: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Bank Fields */}
+            {newPaymentMethod.type === 'bank' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="bankName">Bank Name</Label>
+                  <Select
+                    value={newPaymentMethod.bankName}
+                    onValueChange={(value) => setNewPaymentMethod(prev => ({ ...prev, bankName: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select bank" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HBL">Habib Bank Limited (HBL)</SelectItem>
+                      <SelectItem value="UBL">United Bank Limited (UBL)</SelectItem>
+                      <SelectItem value="MCB">MCB Bank</SelectItem>
+                      <SelectItem value="ABL">Allied Bank Limited (ABL)</SelectItem>
+                      <SelectItem value="Meezan">Meezan Bank</SelectItem>
+                      <SelectItem value="Faysal">Faysal Bank</SelectItem>
+                      <SelectItem value="Bank Alfalah">Bank Alfalah</SelectItem>
+                      <SelectItem value="Standard Chartered">Standard Chartered</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="accountNumber">Account Number / IBAN</Label>
+                  <Input
+                    id="accountNumber"
+                    placeholder="Enter account number"
+                    value={newPaymentMethod.accountNumber}
+                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountNumber: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bankAccountTitle">Account Title</Label>
+                  <Input
+                    id="bankAccountTitle"
+                    placeholder="Account holder name"
+                    value={newPaymentMethod.accountTitle}
+                    onChange={(e) => setNewPaymentMethod(prev => ({ ...prev, accountTitle: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddPaymentMethod} disabled={addingPayment}>
+              {addingPayment ? 'Adding...' : 'Add Method'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2FA Dialog */}
+      <Dialog open={twoFADialogOpen} onOpenChange={setTwoFADialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {twoFAStep === 'disable' ? 'Disable Two-Factor Authentication' : 'Enable Two-Factor Authentication'}
+            </DialogTitle>
+            <DialogDescription>
+              {twoFAStep === 'setup' && 'Setting up 2FA...'}
+              {twoFAStep === 'verify' && 'Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)'}
+              {twoFAStep === 'backup' && 'Save these backup codes in a safe place. You can use them if you lose access to your authenticator app.'}
+              {twoFAStep === 'disable' && 'Enter your password to disable 2FA'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {twoFAStep === 'verify' && (
+              <>
+                {twoFAData.qrCode && (
+                  <div className="flex justify-center">
+                    <img src={twoFAData.qrCode} alt="2FA QR Code" className="w-48 h-48" />
+                  </div>
+                )}
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground mb-2">Or enter this code manually:</p>
+                  <code className="px-3 py-2 bg-muted rounded text-sm font-mono">{twoFAData.secret}</code>
+                </div>
+                <Separator />
+                <div className="space-y-2">
+                  <Label htmlFor="twoFAToken">Enter 6-digit code from your app</Label>
+                  <Input
+                    id="twoFAToken"
+                    placeholder="000000"
+                    value={twoFAToken}
+                    onChange={(e) => setTwoFAToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    maxLength={6}
+                    className="text-center text-2xl tracking-widest"
+                  />
+                </div>
+              </>
+            )}
+
+            {twoFAStep === 'backup' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  {twoFAData.backupCodes.map((code, index) => (
+                    <div key={index} className="px-3 py-2 bg-muted rounded text-center font-mono text-sm">
+                      {code}
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-sm text-amber-600">
+                    ⚠️ These codes will only be shown once. Save them now!
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {twoFAStep === 'disable' && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="disablePassword">Password</Label>
+                  <Input
+                    id="disablePassword"
+                    type="password"
+                    value={twoFAPassword}
+                    onChange={(e) => setTwoFAPassword(e.target.value)}
+                    placeholder="Enter your password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="disableToken">2FA Code (optional)</Label>
+                  <Input
+                    id="disableToken"
+                    placeholder="000000"
+                    value={twoFAToken}
+                    onChange={(e) => setTwoFAToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    maxLength={6}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            {twoFAStep === 'verify' && (
+              <>
+                <Button variant="outline" onClick={() => setTwoFADialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleVerify2FA} disabled={twoFALoading || twoFAToken.length !== 6}>
+                  {twoFALoading ? 'Verifying...' : 'Verify & Enable'}
+                </Button>
+              </>
+            )}
+            {twoFAStep === 'backup' && (
+              <Button onClick={() => setTwoFADialogOpen(false)}>Done</Button>
+            )}
+            {twoFAStep === 'disable' && (
+              <>
+                <Button variant="outline" onClick={() => setTwoFADialogOpen(false)}>Cancel</Button>
+                <Button variant="destructive" onClick={handleDisable2FA} disabled={twoFALoading}>
+                  {twoFALoading ? 'Disabling...' : 'Disable 2FA'}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

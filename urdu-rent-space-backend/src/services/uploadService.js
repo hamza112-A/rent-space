@@ -22,19 +22,23 @@ const uploadToCloudinary = async (fileBuffer, options = {}) => {
       height,
       crop = 'limit',
       quality = 'auto',
-      format = 'auto',
-      resource_type = 'auto'
+      resource_type = 'image'
     } = options;
 
     // Optimize image if it's an image
     let processedBuffer = fileBuffer;
-    if (resource_type === 'image' || resource_type === 'auto') {
+    if (resource_type === 'image') {
       try {
-        processedBuffer = await sharp(fileBuffer)
-          .resize(width, height, { 
+        const sharpInstance = sharp(fileBuffer);
+        
+        if (width || height) {
+          sharpInstance.resize(width, height, { 
             fit: crop === 'fill' ? 'cover' : 'inside',
             withoutEnlargement: true 
-          })
+          });
+        }
+        
+        processedBuffer = await sharpInstance
           .jpeg({ quality: 85 })
           .toBuffer();
       } catch (error) {
@@ -47,19 +51,20 @@ const uploadToCloudinary = async (fileBuffer, options = {}) => {
       const uploadOptions = {
         folder,
         resource_type,
-        quality,
-        format,
-        ...(width && height && { 
-          transformation: [
-            { width, height, crop }
-          ]
-        })
       };
+
+      // Only add transformation if width and height are specified
+      if (width && height) {
+        uploadOptions.transformation = [
+          { width, height, crop, quality }
+        ];
+      }
 
       const uploadStream = cloudinary.uploader.upload_stream(
         uploadOptions,
         (error, result) => {
           if (error) {
+            console.error('Cloudinary upload error:', error);
             reject(new Error(`Cloudinary upload failed: ${error.message}`));
           } else {
             resolve(result);
