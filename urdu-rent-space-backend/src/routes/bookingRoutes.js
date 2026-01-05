@@ -22,8 +22,8 @@ router.get('/', protect, asyncHandler(async (req, res) => {
 
   const bookings = await Booking.find(query)
     .populate('listing', 'title images pricing')
-    .populate('renter', 'name avatar')
-    .populate('owner', 'name avatar')
+    .populate('renter', 'fullName profileImage phone')
+    .populate('owner', 'fullName profileImage phone')
     .sort({ createdAt: -1 });
 
   res.json({ success: true, data: bookings });
@@ -33,8 +33,8 @@ router.get('/', protect, asyncHandler(async (req, res) => {
 router.get('/:id', protect, asyncHandler(async (req, res) => {
   const booking = await Booking.findById(req.params.id)
     .populate('listing')
-    .populate('renter', 'name avatar phone email')
-    .populate('owner', 'name avatar phone email');
+    .populate('renter', 'fullName profileImage phone email')
+    .populate('owner', 'fullName profileImage phone email');
 
   if (!booking) {
     return res.status(404).json({ success: false, message: 'Booking not found' });
@@ -61,17 +61,34 @@ router.post('/', protect, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Cannot book your own listing' });
   }
 
-  // Calculate total price
-  const days = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
-  const totalPrice = listing.pricing.basePrice * days;
+  // Calculate duration and pricing
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) || 1;
+  const dailyRate = listing.pricing?.daily || 0;
+  const subtotal = dailyRate * days;
+  const serviceFee = Math.round(subtotal * 0.05); // 5% service fee
+  const totalAmount = subtotal + serviceFee;
 
   const booking = await Booking.create({
     listing: listingId,
     renter: req.user._id,
     owner: listing.owner,
-    startDate,
-    endDate,
-    totalPrice,
+    startDate: start,
+    endDate: end,
+    duration: {
+      value: days,
+      unit: 'days'
+    },
+    pricing: {
+      priceType: 'daily',
+      unitPrice: dailyRate,
+      subtotal,
+      serviceFee,
+      deposit: listing.policies?.deposit?.amount || 0,
+      totalAmount,
+      currency: listing.pricing?.currency || 'PKR'
+    },
     message,
     status: 'pending'
   });
