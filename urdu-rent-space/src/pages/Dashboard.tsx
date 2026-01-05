@@ -80,10 +80,10 @@ const Dashboard: React.FC = () => {
 
   return (
     <Layout hideFooter>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background pt-16">
         <div className="flex">
           {/* Desktop Sidebar */}
-          <aside className="hidden lg:block w-64 border-r border-border bg-card min-h-[calc(100vh-4rem)] p-4">
+          <aside className="hidden lg:block w-64 border-r border-border bg-card min-h-[calc(100vh-4rem)] p-4 sticky top-16">
             <div className="mb-6">
               <h2 className="text-lg font-semibold text-foreground">Dashboard</h2>
               <p className="text-sm text-muted-foreground">Manage your account</p>
