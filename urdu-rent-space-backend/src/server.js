@@ -75,11 +75,12 @@ app.use('/api/', limiter);
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 requests per windowMs for auth endpoints
+  max: process.env.NODE_ENV === 'development' ? 100 : 10, // More lenient in development
   message: {
     error: 'Too many authentication attempts, please try again later.',
     retryAfter: 900
-  }
+  },
+  skipSuccessfulRequests: true, // Don't count successful requests
 });
 
 // CORS configuration
