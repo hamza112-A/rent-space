@@ -28,15 +28,55 @@ import {
   Save
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { userApi } from '@/lib/api';
+import { toast } from 'sonner';
 
 const AccountSettings: React.FC = () => {
   const { language, setLanguage } = useLanguage();
+  const { user, updateUser, logout } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    fullName: user?.fullName || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    bio: '',
+    address: '',
+  });
   const [notifications, setNotifications] = useState({
     email: true,
     sms: true,
     push: false,
     marketing: false,
   });
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      const response = await userApi.updateProfile({
+        fullName: formData.fullName,
+        bio: formData.bio,
+        address: formData.address,
+      });
+      if (response.data?.data) {
+        updateUser(response.data.data);
+      }
+      toast.success('Profile updated successfully');
+    } catch (err) {
+      toast.error('Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   return (
     <div className="space-y-6">
@@ -58,7 +98,11 @@ const AccountSettings: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-start gap-6">
             <div className="relative">
               <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold">
-                MR
+                {user?.profileImage ? (
+                  <img src={user.profileImage} alt={user.fullName} className="w-full h-full rounded-full object-cover" />
+                ) : (
+                  getInitials(user?.fullName || 'U')
+                )}
               </div>
               <Button 
                 size="icon" 
@@ -69,22 +113,21 @@ const AccountSettings: React.FC = () => {
               </Button>
             </div>
             <div className="flex-1 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue="Muhammad" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue="Rashid" />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input 
+                  id="fullName" 
+                  value={formData.fullName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, fullName: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="bio">Bio</Label>
                 <Textarea 
                   id="bio" 
                   placeholder="Tell us about yourself..."
-                  defaultValue="Experienced property and vehicle rental provider in Lahore with 5+ years of trusted service."
+                  value={formData.bio}
+                  onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
                 />
               </div>
             </div>
@@ -99,8 +142,10 @@ const AccountSettings: React.FC = () => {
                 Email Address
               </Label>
               <div className="flex gap-2">
-                <Input id="email" defaultValue="muhammad.rashid@email.com" className="flex-1" />
-                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Verified</Badge>
+                <Input id="email" value={formData.email} disabled className="flex-1" />
+                <Badge className={user?.isEmailVerified ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"}>
+                  {user?.isEmailVerified ? 'Verified' : 'Pending'}
+                </Badge>
               </div>
             </div>
             <div className="space-y-2">
@@ -109,8 +154,10 @@ const AccountSettings: React.FC = () => {
                 Phone Number
               </Label>
               <div className="flex gap-2">
-                <Input id="phone" defaultValue="+92 300 1234567" className="flex-1" />
-                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Verified</Badge>
+                <Input id="phone" value={formData.phone} disabled className="flex-1" />
+                <Badge className={user?.isPhoneVerified ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"}>
+                  {user?.isPhoneVerified ? 'Verified' : 'Pending'}
+                </Badge>
               </div>
             </div>
           </div>
@@ -120,13 +167,18 @@ const AccountSettings: React.FC = () => {
               <MapPin className="h-4 w-4" />
               Address
             </Label>
-            <Input id="address" defaultValue="House 123, DHA Phase 5, Lahore" />
+            <Input 
+              id="address" 
+              placeholder="Enter your address"
+              value={formData.address}
+              onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+            />
           </div>
 
           <div className="flex justify-end">
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={handleSave} disabled={saving}>
               <Save className="h-4 w-4" />
-              Save Changes
+              {saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </CardContent>
@@ -239,7 +291,7 @@ const AccountSettings: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-foreground">Password</p>
-              <p className="text-sm text-muted-foreground">Last changed 30 days ago</p>
+              <p className="text-sm text-muted-foreground">Change your password</p>
             </div>
             <Button variant="outline">Change Password</Button>
           </div>
@@ -250,14 +302,6 @@ const AccountSettings: React.FC = () => {
               <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
             </div>
             <Button variant="outline">Enable 2FA</Button>
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-foreground">Active Sessions</p>
-              <p className="text-sm text-muted-foreground">Manage devices logged into your account</p>
-            </div>
-            <Button variant="outline">View Sessions</Button>
           </div>
         </CardContent>
       </Card>
@@ -272,30 +316,7 @@ const AccountSettings: React.FC = () => {
           <CardDescription>Manage your payment and payout methods</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="p-4 rounded-lg border border-border flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-8 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold">
-                AB
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Allied Bank</p>
-                <p className="text-sm text-muted-foreground">****4523 • Default</p>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm">Edit</Button>
-          </div>
-          <div className="p-4 rounded-lg border border-border flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-8 bg-green-600 rounded flex items-center justify-center text-white text-xs font-bold">
-                EP
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Easypaisa</p>
-                <p className="text-sm text-muted-foreground">0300****567</p>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm">Edit</Button>
-          </div>
+          <p className="text-muted-foreground text-center py-4">No payment methods added yet</p>
           <Button variant="outline" className="w-full">Add Payment Method</Button>
         </CardContent>
       </Card>
@@ -312,10 +333,10 @@ const AccountSettings: React.FC = () => {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium text-foreground">Deactivate Account</p>
-              <p className="text-sm text-muted-foreground">Temporarily disable your account</p>
+              <p className="font-medium text-foreground">Logout</p>
+              <p className="text-sm text-muted-foreground">Sign out of your account</p>
             </div>
-            <Button variant="outline">Deactivate</Button>
+            <Button variant="outline" onClick={() => logout()}>Logout</Button>
           </div>
           <Separator />
           <div className="flex items-center justify-between">

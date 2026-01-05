@@ -121,11 +121,11 @@ export const categoryApi = {
 // Listings API
 export const listingApi = {
   create: (data: FormData) => api.post('/listings', data),
-  update: (listingId: string, data: FormData) => api.patch(`/listings/${listingId}`, data),
+  update: (listingId: string, data: FormData) => api.put(`/listings/${listingId}`, data),
   delete: (listingId: string) => api.delete(`/listings/${listingId}`),
   getById: (listingId: string) => api.get(`/listings/${listingId}`),
   getMyListings: (params?: { page?: number; limit?: number; status?: string }) =>
-    api.get('/listings/my', { params }),
+    api.get('/listings/user/my-listings', { params }),
   search: (params: {
     query?: string;
     category?: string;
@@ -140,10 +140,10 @@ export const listingApi = {
     endDate?: string;
     verified?: boolean;
     instantBook?: boolean;
-    sortBy?: string;
+    sort?: string;
     page?: number;
     limit?: number;
-  }) => api.get('/listings/search', { params }),
+  }) => api.get('/listings', { params }),
   getSimilar: (listingId: string) => api.get(`/listings/${listingId}/similar`),
   getAvailability: (listingId: string, params: { startDate: string; endDate: string }) =>
     api.get(`/listings/${listingId}/availability`, { params }),
@@ -166,18 +166,17 @@ export const bookingApi = {
     listingId: string;
     startDate: string;
     endDate: string;
-    priceType: string;
     message?: string;
   }) => api.post('/bookings', data),
   getById: (bookingId: string) => api.get(`/bookings/${bookingId}`),
-  getMyBookings: (params?: { page?: number; limit?: number; status?: string; role?: 'renter' | 'owner' }) =>
+  getMyBookings: (params?: { page?: number; limit?: number; status?: string; type?: 'renter' | 'owner' }) =>
     api.get('/bookings', { params }),
-  approve: (bookingId: string) => api.post(`/bookings/${bookingId}/approve`),
+  approve: (bookingId: string) => api.put(`/bookings/${bookingId}/status`, { status: 'approved' }),
   reject: (bookingId: string, data: { reason?: string }) =>
-    api.post(`/bookings/${bookingId}/reject`, data),
+    api.put(`/bookings/${bookingId}/status`, { status: 'rejected', ...data }),
   cancel: (bookingId: string, data: { reason?: string }) =>
-    api.post(`/bookings/${bookingId}/cancel`, data),
-  complete: (bookingId: string) => api.post(`/bookings/${bookingId}/complete`),
+    api.put(`/bookings/${bookingId}/status`, { status: 'cancelled', ...data }),
+  complete: (bookingId: string) => api.put(`/bookings/${bookingId}/status`, { status: 'completed' }),
 };
 
 // Payments API

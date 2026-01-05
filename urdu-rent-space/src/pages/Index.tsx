@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { categories } from '@/lib/categories';
+import { listingApi } from '@/lib/api';
 import { 
   Search, 
   MapPin, 
@@ -39,16 +41,36 @@ const categoryIcons: Record<string, React.ElementType> = {
   air: Plane,
 };
 
+interface Listing {
+  _id: string;
+  title: string;
+  category: { name: string } | string;
+  pricing: { basePrice: number; priceType: string };
+  location: { city: string; area: string };
+  images: { url: string }[];
+  averageRating?: number;
+  reviewCount?: number;
+  owner?: { isVerified?: boolean };
+}
+
 const Index: React.FC = () => {
   const { t } = useLanguage();
+  const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
 
-
-  const featuredListings = [
-    { id: '1', titleKey: 'luxuryApartmentDHA' as const, category: 'property', price: 85000, priceTypeKey: 'perMonth' as const, locationKey: 'karachi' as const, rating: 4.9, reviews: 47, image: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400', verified: true },
-    { id: '2', titleKey: 'toyotaCorolla2023' as const, category: 'vehicles', price: 8500, priceTypeKey: 'perDay' as const, locationKey: 'lahore' as const, rating: 4.8, reviews: 32, image: 'https://images.unsplash.com/photo-1590362891991-f776e747a588?w=400', verified: true },
-    { id: '3', titleKey: 'weddingSherwaniSet' as const, category: 'clothes', price: 15000, priceTypeKey: 'perDay' as const, locationKey: 'islamabad' as const, rating: 5.0, reviews: 18, image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400', verified: false },
-    { id: '4', titleKey: 'professionalCameraKit' as const, category: 'equipment', price: 5000, priceTypeKey: 'perDay' as const, locationKey: 'karachi' as const, rating: 4.7, reviews: 56, image: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400', verified: true },
-  ];
+  useEffect(() => {
+    const fetchListings = async () => {
+      try {
+        const response = await listingApi.search({ limit: 8, sort: 'newest' });
+        setFeaturedListings(response.data?.data || []);
+      } catch (err) {
+        console.error('Failed to fetch listings:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchListings();
+  }, []);
 
   const popularSearchLinks = [
     { labelKey: 'apartments' as const, to: '/category/property' },
@@ -147,36 +169,68 @@ const Index: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredListings.map((listing) => (
-              <Link key={listing.id} to={`/listing/${listing.id}`}>
-                <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                  <div className="relative h-48">
-                    <img src={listing.image} alt={t.listing[listing.titleKey]} className="w-full h-full object-cover" />
-                    {listing.verified && (
-                      <Badge className="absolute top-3 left-3 gap-1 bg-gradient-to-r from-amber-400 to-orange-400">
-                        <CheckCircle2 className="w-3 h-3" /> {t.listing.verified}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-semibold text-foreground mb-2 line-clamp-1">{t.listing[listing.titleKey]}</h3>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
-                      <MapPin className="w-4 h-4" /> {t.listing[listing.locationKey]}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-lg font-bold text-primary">{t.common.pkr} {listing.price.toLocaleString()}</span>
-                        <span className="text-sm text-muted-foreground">{t.listing[listing.priceTypeKey]}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                        <span className="font-medium">{listing.rating}</span>
-                      </div>
-                    </div>
+            {loading ? (
+              // Loading skeletons
+              [1, 2, 3, 4].map((i) => (
+                <Card key={i} className="overflow-hidden">
+                  <Skeleton className="h-48 w-full" />
+                  <div className="p-4 space-y-2">
+                    <Skeleton className="h-5 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-6 w-1/3" />
                   </div>
                 </Card>
-              </Link>
-            ))}
+              ))
+            ) : featuredListings.length > 0 ? (
+              featuredListings.map((listing) => (
+                <Link key={listing._id} to={`/listing/${listing._id}`}>
+                  <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                    <div className="relative h-48 bg-muted">
+                      {listing.images?.[0]?.url ? (
+                        <img src={listing.images[0].url} alt={listing.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          No Image
+                        </div>
+                      )}
+                      {listing.owner?.isVerified && (
+                        <Badge className="absolute top-3 left-3 gap-1 bg-gradient-to-r from-amber-400 to-orange-400">
+                          <CheckCircle2 className="w-3 h-3" /> {t.listing.verified}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-foreground mb-2 line-clamp-1">{listing.title}</h3>
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
+                        <MapPin className="w-4 h-4" /> {listing.location?.city || 'Pakistan'}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-lg font-bold text-primary">
+                            {t.common.pkr} {(listing.pricing?.basePrice || 0).toLocaleString()}
+                          </span>
+                          <span className="text-sm text-muted-foreground">/{listing.pricing?.priceType || 'day'}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                          <span className="font-medium">{listing.averageRating?.toFixed(1) || '5.0'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              ))
+            ) : (
+              <div className="col-span-4 text-center py-12">
+                <p className="text-muted-foreground">No listings available yet. Be the first to create one!</p>
+                <Link to="/create-listing">
+                  <Button className="mt-4 gap-2">
+                    <Plus className="w-4 h-4" />
+                    Create Listing
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </section>
