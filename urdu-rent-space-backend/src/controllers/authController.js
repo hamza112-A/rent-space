@@ -85,6 +85,7 @@ const register = asyncHandler(async (req, res, next) => {
     success: true,
     data: {
       userId: user._id,
+      email: user.email,
       message: 'Registration successful. Please verify your email and phone number.',
       verificationRequired: {
         email: true,
@@ -153,21 +154,32 @@ const login = asyncHandler(async (req, res, next) => {
   const refreshToken = user.generateRefreshToken();
   await user.save({ validateBeforeSave: false });
 
-  // Set refresh token in httpOnly cookie
-  const cookieOptions = {
-    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+  // Cookie options
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  const accessTokenOptions = {
+    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    path: '/'
   };
 
-  res.cookie('refreshToken', refreshToken, cookieOptions);
+  const refreshTokenOptions = {
+    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    path: '/'
+  };
+
+  // Set tokens in HTTP-only cookies
+  res.cookie('accessToken', accessToken, accessTokenOptions);
+  res.cookie('refreshToken', refreshToken, refreshTokenOptions);
 
   res.status(200).json({
     success: true,
     data: {
-      accessToken,
-      refreshToken,
       expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
       user: {
         id: user._id,
@@ -243,14 +255,61 @@ const verifyOTP = asyncHandler(async (req, res, next) => {
     verification.attempts = 0;
   }
 
+  // Activate user if email is verified
+  if (type === 'email') {
+    user.status = 'active';
+  }
+
   await user.save({ validateBeforeSave: false });
+
+  // Generate tokens so user can log in after verification
+  const accessToken = jwt.sign(
+    { id: user._id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '7d' }
+  );
+
+  const refreshToken = jwt.sign(
+    { id: user._id },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' }
+  );
+
+  // Cookie options
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  const accessTokenOptions = {
+    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    path: '/'
+  };
+
+  const refreshTokenOptions = {
+    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    path: '/'
+  };
+
+  // Set tokens in HTTP-only cookies
+  res.cookie('accessToken', accessToken, accessTokenOptions);
+  res.cookie('refreshToken', refreshToken, refreshTokenOptions);
 
   res.status(200).json({
     success: true,
     data: {
       message: `${type} verified successfully`,
       verified: true,
-      isFullyVerified: user.isFullyVerified
+      isFullyVerified: user.isFullyVerified,
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role
+      }
     }
   });
 });
@@ -365,7 +424,7 @@ const selectRole = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/refresh
 // @access  Public
 const refreshToken = asyncHandler(async (req, res, next) => {
-  const { refreshToken: token } = req.body || req.cookies;
+  const token = req.cookies.refreshToken || req.body.refreshToken;
 
   if (!token) {
     return next(new ErrorResponse('Refresh token is required', 401));
@@ -391,11 +450,24 @@ const refreshToken = asyncHandler(async (req, res, next) => {
     // Generate new access token
     const accessToken = user.getSignedJwtToken();
 
+    // Cookie options
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    const accessTokenOptions = {
+      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      path: '/'
+    };
+
+    // Set new access token in cookie
+    res.cookie('accessToken', accessToken, accessTokenOptions);
+
     res.status(200).json({
       success: true,
       data: {
-        accessToken,
-        expiresIn: 7 * 24 * 60 * 60 // 7 days in seconds
+        expiresIn: 7 * 24 * 60 * 60
       }
     });
 
@@ -408,7 +480,7 @@ const refreshToken = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/auth/logout
 // @access  Private
 const logout = asyncHandler(async (req, res, next) => {
-  const { refreshToken: token } = req.body || req.cookies;
+  const token = req.cookies.refreshToken || req.body.refreshToken;
 
   if (token) {
     // Remove refresh token from user's tokens
@@ -419,11 +491,15 @@ const logout = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // Clear refresh token cookie
-  res.cookie('refreshToken', 'none', {
+  // Clear both cookies
+  const cookieOptions = {
     expires: new Date(Date.now() + 10 * 1000),
-    httpOnly: true
-  });
+    httpOnly: true,
+    path: '/'
+  };
+
+  res.cookie('accessToken', 'none', cookieOptions);
+  res.cookie('refreshToken', 'none', cookieOptions);
 
   res.status(200).json({
     success: true,
