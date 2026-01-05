@@ -90,6 +90,10 @@ export const authApi = {
     api.post('/auth/forgot-password', { email }),
   resetPassword: (data: { token: string; password: string }) =>
     api.post('/auth/reset-password', data),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    api.post('/auth/change-password', data),
+  deleteAccount: (password: string) =>
+    api.delete('/auth/delete-account', { data: { password } }),
 };
 
 // User API

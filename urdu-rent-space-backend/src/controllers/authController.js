@@ -632,6 +632,90 @@ const getMe = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Change password (for logged-in users)
+// @route   POST /api/v1/auth/change-password
+// @access  Private
+const changePassword = asyncHandler(async (req, res, next) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return next(new ErrorResponse('Current password and new password are required', 400));
+  }
+
+  if (newPassword.length < 8) {
+    return next(new ErrorResponse('New password must be at least 8 characters', 400));
+  }
+
+  const user = await User.findById(req.user.id).select('+password');
+
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  // Check current password
+  const isMatch = await user.matchPassword(currentPassword);
+
+  if (!isMatch) {
+    return next(new ErrorResponse('Current password is incorrect', 401));
+  }
+
+  // Set new password
+  user.password = newPassword;
+  user.passwordChangedAt = new Date();
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    data: {
+      message: 'Password changed successfully'
+    }
+  });
+});
+
+// @desc    Delete user account
+// @route   DELETE /api/v1/auth/delete-account
+// @access  Private
+const deleteAccount = asyncHandler(async (req, res, next) => {
+  const { password } = req.body;
+
+  if (!password) {
+    return next(new ErrorResponse('Password is required to delete account', 400));
+  }
+
+  const user = await User.findById(req.user.id).select('+password');
+
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  // Verify password
+  const isMatch = await user.matchPassword(password);
+
+  if (!isMatch) {
+    return next(new ErrorResponse('Password is incorrect', 401));
+  }
+
+  // Delete user (or mark as deleted)
+  await User.findByIdAndDelete(req.user.id);
+
+  // Clear cookies
+  const cookieOptions = {
+    expires: new Date(Date.now() + 10 * 1000),
+    httpOnly: true,
+    path: '/'
+  };
+
+  res.cookie('accessToken', 'none', cookieOptions);
+  res.cookie('refreshToken', 'none', cookieOptions);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      message: 'Account deleted successfully'
+    }
+  });
+});
+
 module.exports = {
   register,
   login,
@@ -642,5 +726,7 @@ module.exports = {
   logout,
   forgotPassword,
   resetPassword,
-  getMe
+  getMe,
+  changePassword,
+  deleteAccount
 };

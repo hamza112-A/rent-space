@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   User,
   Mail,
   Phone,
@@ -26,21 +35,46 @@ import {
   CreditCard,
   Trash2,
   Camera,
-  Save
+  Save,
+  Eye,
+  EyeOff,
+  AlertTriangle,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { userApi } from '@/lib/api';
+import { userApi, authApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 const AccountSettings: React.FC = () => {
   const { language, setLanguage } = useLanguage();
   const { user, updateUser, logout, checkAuth } = useAuth();
+  const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [currency, setCurrency] = useState('pkr');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  
+  // Password change dialog
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  // Delete account dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -150,6 +184,7 @@ const AccountSettings: React.FC = () => {
         location: { address: formData.address },
         preferences: {
           notifications: notifications,
+          currency: currency,
         },
       });
       if (response.data?.data) {
@@ -160,6 +195,52 @@ const AccountSettings: React.FC = () => {
       toast.error('Failed to update profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    if (passwordData.newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      await authApi.changePassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+      toast.success('Password changed successfully');
+      setPasswordDialogOpen(false);
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      toast.error('Please enter your password');
+      return;
+    }
+
+    try {
+      setDeletingAccount(true);
+      await authApi.deleteAccount(deletePassword);
+      toast.success('Account deleted successfully');
+      setDeleteDialogOpen(false);
+      logout();
+      navigate('/');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete account');
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -395,7 +476,7 @@ const AccountSettings: React.FC = () => {
             </div>
             <div className="space-y-2">
               <Label>Currency</Label>
-              <Select defaultValue="pkr">
+              <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -424,7 +505,7 @@ const AccountSettings: React.FC = () => {
               <p className="font-medium text-foreground">Password</p>
               <p className="text-sm text-muted-foreground">Change your password</p>
             </div>
-            <Button variant="outline">Change Password</Button>
+            <Button variant="outline" onClick={() => setPasswordDialogOpen(true)}>Change Password</Button>
           </div>
           <Separator />
           <div className="flex items-center justify-between">
@@ -432,7 +513,7 @@ const AccountSettings: React.FC = () => {
               <p className="font-medium text-foreground">Two-Factor Authentication</p>
               <p className="text-sm text-muted-foreground">Add an extra layer of security</p>
             </div>
-            <Button variant="outline">Enable 2FA</Button>
+            <Button variant="outline" disabled>Coming Soon</Button>
           </div>
         </CardContent>
       </Card>
@@ -475,10 +556,125 @@ const AccountSettings: React.FC = () => {
               <p className="font-medium text-foreground">Delete Account</p>
               <p className="text-sm text-muted-foreground">Permanently delete your account and all data</p>
             </div>
-            <Button variant="destructive">Delete Account</Button>
+            <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>Delete Account</Button>
           </div>
         </CardContent>
       </Card>
+
+      {/* Change Password Dialog */}
+      <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>
+              Enter your current password and choose a new one
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <div className="relative">
+                <Input
+                  id="currentPassword"
+                  type={showPasswords.current ? 'text' : 'password'}
+                  value={passwordData.currentPassword}
+                  onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPasswords.new ? 'text' : 'password'}
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showPasswords.confirm ? 'text' : 'password'}
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleChangePassword} disabled={changingPassword}>
+              {changingPassword ? 'Changing...' : 'Change Password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Account Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Account
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. All your data, listings, and bookings will be permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+              <p className="text-sm text-destructive">
+                Warning: This will permanently delete your account and all associated data including listings, bookings, messages, and reviews.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deletePassword">Enter your password to confirm</Label>
+              <Input
+                id="deletePassword"
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Enter your password"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteAccount} disabled={deletingAccount}>
+              {deletingAccount ? 'Deleting...' : 'Delete My Account'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
