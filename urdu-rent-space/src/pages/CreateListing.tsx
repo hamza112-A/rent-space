@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { listingApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -124,6 +126,7 @@ const categoryFields: Record<string, { name: string; type: string; options?: str
 
 const CreateListing: React.FC = () => {
   const { t } = useLanguage();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -168,15 +171,14 @@ const CreateListing: React.FC = () => {
   };
 
   const handleSubmit = async () => {
+    if (!isAuthenticated) {
+      toast.error('Please login to create a listing');
+      navigate('/login');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Please login to create a listing');
-        navigate('/login');
-        return;
-      }
-
       // Build the listing data matching the backend schema
       const listingData = {
         title: formData.title,
@@ -229,25 +231,15 @@ const CreateListing: React.FC = () => {
         submitData.append('imageUrls', JSON.stringify(images));
       }
 
-      const response = await fetch('/api/v1/listings', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: submitData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to create listing');
-      }
+      // Use the API client which handles cookies automatically
+      await listingApi.create(submitData);
 
       toast.success('Listing created successfully!');
       navigate('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating listing:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create listing');
+      const message = error.response?.data?.message || error.message || 'Failed to create listing';
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
