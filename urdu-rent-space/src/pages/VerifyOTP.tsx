@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { ArrowLeft, Mail, Phone, RefreshCw } from 'lucide-react';
+import { authApi } from '@/lib/api';
 
 const VerifyOTP: React.FC = () => {
   const { t } = useLanguage();
@@ -12,8 +13,20 @@ const VerifyOTP: React.FC = () => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(30);
-  const [verifyMethod] = useState<'email' | 'phone'>('email');
+  const [verifyMethod, setVerifyMethod] = useState<'email' | 'phone'>('email');
+  const [userInfo, setUserInfo] = useState<{ userId: string; email: string; phone: string; role: string } | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  useEffect(() => {
+    // Get pending verification info from localStorage
+    const pending = localStorage.getItem('pendingVerification');
+    if (pending) {
+      setUserInfo(JSON.parse(pending));
+    } else {
+      toast.error('No pending verification found');
+      navigate('/register');
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -63,19 +76,57 @@ const VerifyOTP: React.FC = () => {
       return;
     }
 
+    if (!userInfo) {
+      toast.error('User information not found');
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await authApi.verifyOTP({
+        userId: userInfo.userId,
+        otp: code,
+        type: verifyMethod,
+      });
+      
+      // Clear pending verification
+      localStorage.removeItem('pendingVerification');
+
       toast.success('Verification successful!');
       navigate('/dashboard');
-    }, 1500);
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Invalid OTP. Please try again.';
+      toast.error(message);
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleResend = () => {
-    if (resendCooldown > 0) return;
-    setResendCooldown(30);
-    toast.success('New OTP sent to your ' + verifyMethod);
+  const handleResend = async () => {
+    if (resendCooldown > 0 || !userInfo) return;
+    
+    try {
+      await authApi.resendOTP({
+        userId: userInfo.userId,
+        type: verifyMethod,
+      });
+      setResendCooldown(30);
+      toast.success(`New OTP sent to your ${verifyMethod}`);
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to resend OTP';
+      toast.error(message);
+    }
   };
+
+  const maskedEmail = userInfo?.email 
+    ? userInfo.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')
+    : 'your@email.com';
+  
+  const maskedPhone = userInfo?.phone
+    ? userInfo.phone.replace(/(\+\d{2}\s?\d{3})\s?\d+(\d{3})/, '$1 ****$2')
+    : '+92 300 ****567';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 flex items-center justify-center p-4">
@@ -98,11 +149,35 @@ const VerifyOTP: React.FC = () => {
             <CardDescription>
               {t.auth.enterOTP}{' '}
               <span className="font-medium text-foreground">
-                {verifyMethod === 'email' ? 'your@email.com' : '+92 300 ****567'}
+                {verifyMethod === 'email' ? maskedEmail : maskedPhone}
               </span>
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Toggle between email and phone verification */}
+            <div className="flex gap-2 mb-6">
+              <Button
+                type="button"
+                variant={verifyMethod === 'email' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setVerifyMethod('email')}
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Email
+              </Button>
+              <Button
+                type="button"
+                variant={verifyMethod === 'phone' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1"
+                onClick={() => setVerifyMethod('phone')}
+              >
+                <Phone className="w-4 h-4 mr-2" />
+                Phone
+              </Button>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="flex justify-center gap-3">
                 {otp.map((digit, index) => (
