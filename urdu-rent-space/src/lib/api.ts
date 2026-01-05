@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 // API base URL from environment
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 // Create axios instance with default config
 const api: AxiosInstance = axios.create({
@@ -10,15 +10,12 @@ const api: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Important: Send cookies with requests
 });
 
-// Request interceptor - add auth token
+// Request interceptor
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('authToken');
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     return config;
   },
   (error: AxiosError) => {
@@ -26,32 +23,24 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - handle errors
+// Response interceptor - handle errors and token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     
     // Handle 401 - try to refresh token
-    if (error.response?.status === 401 && originalRequest) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-            refreshToken,
-          });
-          const { accessToken } = response.data;
-          localStorage.setItem('authToken', accessToken);
-          
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          }
-          return api(originalRequest);
-        }
+        // Try to refresh the token (cookies are sent automatically)
+        await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+        
+        // Retry the original request
+        return api(originalRequest);
       } catch {
-        // Refresh failed, logout user
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('refreshToken');
+        // Refresh failed, redirect to login
         window.location.href = '/login';
       }
     }
@@ -84,7 +73,7 @@ export interface ApiError {
 
 // Auth API
 export const authApi = {
-  register: (data: { email: string; phone: string; password: string; fullName: string }) =>
+  register: (data: { email: string; phone: string; password: string; fullName: string; role: string }) =>
     api.post('/auth/register', data),
   login: (data: { email?: string; phone?: string; password: string }) =>
     api.post('/auth/login', data),
