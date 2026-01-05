@@ -7,13 +7,13 @@ const User = require('../models/User');
 const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  // Check for token in Authorization header
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
+  // Check for token in cookies first (HTTP-only cookie)
+  if (req.cookies.accessToken && req.cookies.accessToken !== 'none') {
+    token = req.cookies.accessToken;
   }
-  // Check for token in cookies
-  else if (req.cookies.token) {
-    token = req.cookies.token;
+  // Fallback to Authorization header
+  else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
   // Make sure token exists
@@ -225,13 +225,13 @@ const userRateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000) => {
 const optionalAuth = asyncHandler(async (req, res, next) => {
   let token;
 
-  // Check for token in Authorization header
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
+  // Check for token in cookies first
+  if (req.cookies.accessToken && req.cookies.accessToken !== 'none') {
+    token = req.cookies.accessToken;
   }
-  // Check for token in cookies
-  else if (req.cookies.token) {
-    token = req.cookies.token;
+  // Fallback to Authorization header
+  else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
   // If no token, continue without user
