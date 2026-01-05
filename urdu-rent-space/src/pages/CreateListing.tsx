@@ -169,11 +169,88 @@ const CreateListing: React.FC = () => {
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Please login to create a listing');
+        navigate('/login');
+        return;
+      }
+
+      // Build the listing data matching the backend schema
+      const listingData = {
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        subcategory: formData.subcategory,
+        location: {
+          address: formData.location,
+          city: formData.city,
+          area: formData.location,
+        },
+        pricing: {
+          hourly: formData.hourlyRate ? Number(formData.hourlyRate) : undefined,
+          daily: formData.dailyRate ? Number(formData.dailyRate) : undefined,
+          weekly: formData.weeklyRate ? Number(formData.weeklyRate) : undefined,
+          monthly: formData.monthlyRate ? Number(formData.monthlyRate) : undefined,
+          currency: 'PKR',
+        },
+        availability: {
+          instantBook: formData.instantBook,
+          blockedDates: unavailableDates,
+        },
+        policies: {
+          cancellation: formData.cancellationPolicy,
+          deposit: {
+            amount: formData.deposit ? Number(formData.deposit) : 0,
+            required: !!formData.deposit,
+          },
+        },
+        specifications: formData.dynamicFields,
+      };
+
+      // Create FormData for multipart upload (images)
+      const submitData = new FormData();
+      
+      // Append all listing data as JSON
+      Object.entries(listingData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          if (typeof value === 'object') {
+            submitData.append(key, JSON.stringify(value));
+          } else {
+            submitData.append(key, String(value));
+          }
+        }
+      });
+
+      // Note: For real image upload, you'd append actual File objects here
+      // For now, we're sending the mock image URLs
+      if (images.length > 0) {
+        submitData.append('imageUrls', JSON.stringify(images));
+      }
+
+      const response = await fetch('/api/v1/listings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: submitData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create listing');
+      }
+
       toast.success('Listing created successfully!');
       navigate('/dashboard');
-    }, 1500);
+    } catch (error) {
+      console.error('Error creating listing:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create listing');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const canProceed = () => {
