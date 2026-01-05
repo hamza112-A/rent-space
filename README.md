@@ -2,6 +2,8 @@
 
 A comprehensive rental marketplace application built for the Pakistani market with complete Urdu language support.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## 🏗️ Project Structure
 
 ```
