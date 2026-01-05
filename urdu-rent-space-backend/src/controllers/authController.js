@@ -648,6 +648,8 @@ const getMe = asyncHandler(async (req, res, next) => {
     isEmailVerified: user.verification?.email?.verified || false,
     isPhoneVerified: user.verification?.phone?.verified || false,
     isIdentityVerified: user.verification?.identity?.verified || false,
+    isAdmin: user.isAdmin || false,
+    isSuperAdmin: user.isSuperAdmin || false,
     verification: user.verification,
     subscription: user.subscription,
     stats: user.stats,

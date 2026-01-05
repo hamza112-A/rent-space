@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Select,
   SelectContent,
@@ -54,6 +55,7 @@ interface Transaction {
 }
 
 const Earnings: React.FC = () => {
+  const { t } = useLanguage();
   const [period, setPeriod] = useState('month');
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -135,28 +137,28 @@ const Earnings: React.FC = () => {
   const stats = summary
     ? [
         {
-          label: 'Total Earnings',
+          label: t.dashboard.totalEarnings,
           value: formatCurrency(summary.totalEarnings),
           change: `+${summary.thisMonth.growth}%`,
           trend: summary.thisMonth.growth >= 0 ? 'up' : 'down',
           icon: DollarSign,
         },
         {
-          label: 'Pending Payouts',
+          label: t.dashboard.pendingPayouts,
           value: formatCurrency(summary.pendingPayout),
-          change: `${summary.thisMonth.bookings} bookings`,
+          change: `${summary.thisMonth.bookings} ${t.dashboard.totalBookings.toLowerCase()}`,
           trend: 'neutral',
           icon: Clock,
         },
         {
-          label: 'Available Balance',
+          label: t.payment.title,
           value: formatCurrency(summary.availableBalance),
-          change: 'Withdraw now',
+          change: t.common.seeMore,
           trend: 'neutral',
           icon: Wallet,
         },
         {
-          label: 'This Month',
+          label: t.dashboard.thisMonth,
           value: formatCurrency(summary.thisMonth.earnings),
           change: `+${summary.thisMonth.growth}%`,
           trend: summary.thisMonth.growth >= 0 ? 'up' : 'down',
@@ -206,8 +208,8 @@ const Earnings: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Earnings</h1>
-          <p className="text-muted-foreground">Track your rental income and payouts</p>
+          <h1 className="text-2xl font-bold text-foreground">{t.dashboard.earnings}</h1>
+          <p className="text-muted-foreground">{t.dashboard.totalEarnings}</p>
         </div>
         <div className="flex gap-2">
           <Select value={period} onValueChange={setPeriod}>
@@ -215,15 +217,15 @@ const Earnings: React.FC = () => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="week">This Week</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-              <SelectItem value="quarter">This Quarter</SelectItem>
-              <SelectItem value="year">This Year</SelectItem>
+              <SelectItem value="week">{t.filters.title}</SelectItem>
+              <SelectItem value="month">{t.dashboard.thisMonth}</SelectItem>
+              <SelectItem value="quarter">{t.filters.title}</SelectItem>
+              <SelectItem value="year">{t.filters.title}</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" className="gap-2">
             <Download className="h-4 w-4" />
-            Export
+            {t.common.save}
           </Button>
         </div>
       </div>

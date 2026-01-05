@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { listingApi, bookingApi, userApi } from '@/lib/api';
 import { 
   Package, 
@@ -40,6 +41,7 @@ interface Listing {
 
 const DashboardOverview: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentBookings, setRecentBookings] = useState<Booking[]>([]);
   const [recentListings, setRecentListings] = useState<Listing[]>([]);
@@ -153,25 +155,25 @@ const DashboardOverview: React.FC = () => {
 
   const statsData = [
     { 
-      label: 'Active Listings', 
+      label: t.dashboard.activeListings, 
       value: stats?.activeListings || 0,
       icon: Package,
       color: 'text-blue-500'
     },
     { 
-      label: 'Total Bookings', 
+      label: t.dashboard.totalBookings, 
       value: stats?.totalBookings || 0,
       icon: Calendar,
       color: 'text-green-500'
     },
     { 
-      label: 'Total Earnings', 
+      label: t.dashboard.totalEarnings, 
       value: formatCurrency(stats?.totalEarnings || 0),
       icon: DollarSign,
       color: 'text-amber-500'
     },
     { 
-      label: 'Profile Views', 
+      label: t.dashboard.profile || 'Profile Views', 
       value: stats?.profileViews || 0,
       icon: Eye,
       color: 'text-purple-500'
@@ -182,9 +184,9 @@ const DashboardOverview: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">
-          Welcome back, {user?.fullName?.split(' ')[0] || 'User'}!
+          {t.dashboard.welcome}, {user?.fullName?.split(' ')[0] || 'User'}!
         </h1>
-        <p className="text-muted-foreground">Here's what's happening with your rentals</p>
+        <p className="text-muted-foreground">{t.hero.featuredSubtitle}</p>
       </div>
 
       {/* Stats Grid */}
@@ -218,16 +220,16 @@ const DashboardOverview: React.FC = () => {
                 <CheckCircle className="h-6 w-6 text-green-500" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">Verification Status</h3>
-                <p className="text-sm text-muted-foreground">Complete verification to build trust</p>
+                <h3 className="font-semibold text-foreground">{t.verification.title}</h3>
+                <p className="text-sm text-muted-foreground">{t.verification.subtitle}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <Badge className={user?.isEmailVerified ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"}>
-                {user?.isEmailVerified ? 'Email Verified' : 'Email Pending'}
+                {user?.isEmailVerified ? t.verification.email : t.verification.pending}
               </Badge>
               <Badge className={user?.isPhoneVerified ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-amber-500/10 text-amber-600 border-amber-500/20"}>
-                {user?.isPhoneVerified ? 'Phone Verified' : 'Phone Pending'}
+                {user?.isPhoneVerified ? t.verification.phone : t.verification.pending}
               </Badge>
             </div>
           </div>
@@ -240,12 +242,12 @@ const DashboardOverview: React.FC = () => {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Recent Bookings
+              {t.booking.history}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {recentBookings.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">No bookings yet</p>
+              <p className="text-muted-foreground text-center py-8">{t.common.noResults}</p>
             ) : (
               <div className="space-y-4">
                 {recentBookings.slice(0, 5).map((booking) => (
@@ -279,12 +281,12 @@ const DashboardOverview: React.FC = () => {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Package className="h-5 w-5" />
-              Your Listings
+              {t.dashboard.myListings}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {recentListings.length === 0 ? (
-              <p className="text-muted-foreground text-center py-8">No listings yet</p>
+              <p className="text-muted-foreground text-center py-8">{t.common.noResults}</p>
             ) : (
               <div className="space-y-4">
                 {recentListings.slice(0, 5).map((listing) => (

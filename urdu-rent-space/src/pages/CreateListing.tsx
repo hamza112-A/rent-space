@@ -268,10 +268,10 @@ const CreateListing: React.FC = () => {
           <div className="mb-8">
             <Link to="/dashboard" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4">
               <ArrowLeft className="w-4 h-4" />
-              Back to Dashboard
+              {t.common.back}
             </Link>
             <h1 className="text-3xl font-bold text-foreground">{t.nav.createListing}</h1>
-            <p className="text-muted-foreground mt-2">List your item for rent and start earning</p>
+            <p className="text-muted-foreground mt-2">{t.listing.description}</p>
           </div>
 
           {/* Progress Steps */}

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ interface Listing {
 }
 
 const MyListings: React.FC = () => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -159,13 +161,13 @@ const MyListings: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">My Listings</h1>
-          <p className="text-muted-foreground">Manage your rental listings</p>
+          <h1 className="text-2xl font-bold text-foreground">{t.dashboard.myListings}</h1>
+          <p className="text-muted-foreground">{t.listing.description}</p>
         </div>
         <Link to="/create-listing">
           <Button className="gap-2">
             <Plus className="h-4 w-4" />
-            Add New Listing
+            {t.nav.createListing}
           </Button>
         </Link>
       </div>
@@ -177,7 +179,7 @@ const MyListings: React.FC = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search listings..."
+                placeholder={t.nav.search}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -185,13 +187,13 @@ const MyListings: React.FC = () => {
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Status" />
+                <SelectValue placeholder={t.filters.title} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="paused">Paused</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="all">{t.common.all}</SelectItem>
+                <SelectItem value="active">{t.listing.available}</SelectItem>
+                <SelectItem value="paused">{t.booking.pending}</SelectItem>
+                <SelectItem value="pending">{t.booking.pending}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -250,25 +252,25 @@ const MyListings: React.FC = () => {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => navigate(`/listing/${listing._id}`)}>
-                          <Eye className="h-4 w-4 mr-2" /> View
+                          <Eye className="h-4 w-4 mr-2" /> {t.listing.viewDetails}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate(`/edit-listing/${listing._id}`)}>
-                          <Edit className="h-4 w-4 mr-2" /> Edit
+                          <Edit className="h-4 w-4 mr-2" /> {t.common.edit}
                         </DropdownMenuItem>
                         {listing.status === 'active' ? (
                           <DropdownMenuItem onClick={() => handleStatusChange(listing._id, 'paused')}>
-                            <Pause className="h-4 w-4 mr-2" /> Pause
+                            <Pause className="h-4 w-4 mr-2" /> {t.booking.pending}
                           </DropdownMenuItem>
                         ) : (
                           <DropdownMenuItem onClick={() => handleStatusChange(listing._id, 'active')}>
-                            <Play className="h-4 w-4 mr-2" /> Activate
+                            <Play className="h-4 w-4 mr-2" /> {t.listing.available}
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem 
                           className="text-destructive"
                           onClick={() => handleDelete(listing._id)}
                         >
-                          <Trash2 className="h-4 w-4 mr-2" /> Delete
+                          <Trash2 className="h-4 w-4 mr-2" /> {t.common.delete}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -283,13 +285,13 @@ const MyListings: React.FC = () => {
           <CardContent className="p-12 text-center">
             <p className="text-muted-foreground mb-4">
               {listings.length === 0 
-                ? "You haven't created any listings yet" 
-                : "No listings found matching your filters"}
+                ? t.common.noResults
+                : t.common.noResults}
             </p>
             <Link to="/create-listing">
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
-                Create Your First Listing
+                {t.nav.createListing}
               </Button>
             </Link>
           </CardContent>

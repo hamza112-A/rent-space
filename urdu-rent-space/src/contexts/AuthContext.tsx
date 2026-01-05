@@ -9,6 +9,8 @@ interface User {
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   profileImage?: string;
+  isAdmin?: boolean;
+  isSuperAdmin?: boolean;
 }
 
 interface AuthContextType {

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   CheckCircle,
   XCircle,
@@ -31,6 +32,7 @@ interface VerificationStatus {
 
 const Verification: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,24 +72,24 @@ const Verification: React.FC = () => {
     return [
       {
         id: 'email',
-        label: 'Email Verification',
-        description: 'Verify your email address',
+        label: t.verification.email,
+        description: t.verification.subtitle,
         icon: Mail,
         status: status?.email?.verified ? 'verified' : 'not_started',
         completedAt: status?.email?.verifiedAt,
       },
       {
         id: 'phone',
-        label: 'Phone Verification',
-        description: 'Verify your mobile number via OTP',
+        label: t.verification.phone,
+        description: t.verification.subtitle,
         icon: Phone,
         status: status?.phone?.verified ? 'verified' : 'not_started',
         completedAt: status?.phone?.verifiedAt,
       },
       {
         id: 'identity',
-        label: 'ID Verification',
-        description: 'Upload your National ID card (CNIC/Passport)',
+        label: t.verification.id,
+        description: t.verification.uploadID,
         icon: CreditCard,
         status: status?.identity?.verified
           ? 'verified'
@@ -100,8 +102,8 @@ const Verification: React.FC = () => {
       },
       {
         id: 'biometric',
-        label: 'Photo Verification',
-        description: 'Take a selfie for identity confirmation',
+        label: t.verification.biometric,
+        description: t.verification.verifyFace,
         icon: Camera,
         status: status?.biometric?.verified
           ? 'verified'
@@ -135,13 +137,13 @@ const Verification: React.FC = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'verified':
-        return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Verified</Badge>;
+        return <Badge className="bg-green-500/10 text-green-600 border-green-500/20">{t.listing.verified}</Badge>;
       case 'pending':
-        return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">Pending Review</Badge>;
+        return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20">{t.verification.pending}</Badge>;
       case 'rejected':
-        return <Badge className="bg-red-500/10 text-red-600 border-red-500/20">Rejected</Badge>;
+        return <Badge className="bg-red-500/10 text-red-600 border-red-500/20">{t.booking.rejected}</Badge>;
       default:
-        return <Badge variant="outline">Not Started</Badge>;
+        return <Badge variant="outline">{t.verification.notVerified}</Badge>;
     }
   };
 
@@ -184,8 +186,8 @@ const Verification: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Verification Status</h1>
-        <p className="text-muted-foreground">Complete verification to unlock all features</p>
+        <h1 className="text-2xl font-bold text-foreground">{t.verification.title}</h1>
+        <p className="text-muted-foreground">{t.verification.subtitle}</p>
       </div>
 
       {/* Progress Overview */}

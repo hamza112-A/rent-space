@@ -51,7 +51,7 @@ import { userApi, authApi, paymentApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 const AccountSettings: React.FC = () => {
-  const { language, setLanguage } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const { user, updateUser, logout, checkAuth } = useAuth();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
@@ -518,8 +518,8 @@ const AccountSettings: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Account Settings</h1>
-        <p className="text-muted-foreground">Manage your profile and preferences</p>
+        <h1 className="text-2xl font-bold text-foreground">{t.dashboard.settings}</h1>
+        <p className="text-muted-foreground">{t.dashboard.profile}</p>
       </div>
 
       {/* Profile Section */}

@@ -66,7 +66,7 @@ const Footer: React.FC = () => {
 
           {/* Company Column */}
           <div>
-            <h4 className="font-semibold text-lg mb-6">Company</h4>
+            <h4 className="font-semibold text-lg mb-6">{t.footer.about}</h4>
             <ul className="space-y-3">
               <li>
                 <Link to="/about" className="text-background/70 hover:text-background transition-colors text-sm">

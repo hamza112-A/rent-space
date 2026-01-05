@@ -694,12 +694,12 @@ const ListingDetail: React.FC = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setBookingDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setBookingDialogOpen(false)}>{t.common.cancel}</Button>
               <Button onClick={handleConfirmBooking} disabled={bookingLoading}>
-                {bookingLoading ? 'Processing...' : (
+                {bookingLoading ? t.common.loading : (
                   <>
                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Confirm Booking
+                    {t.booking.confirmBooking}
                   </>
                 )}
               </Button>
@@ -741,10 +741,10 @@ const ListingDetail: React.FC = () => {
               />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setContactDialogOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setContactDialogOpen(false)}>{t.common.cancel}</Button>
               <Button onClick={handleSendMessage}>
                 <Send className="h-4 w-4 mr-2" />
-                Send Message
+                {t.dashboard.messages}
               </Button>
             </DialogFooter>
           </DialogContent>

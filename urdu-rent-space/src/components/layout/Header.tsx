@@ -159,7 +159,7 @@ const Header: React.FC = () => {
               <Link to="/dashboard">
                 <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm" className="gap-2">
                   <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
+                  {t.nav.dashboard}
                 </Button>
               </Link>
             )}
@@ -178,19 +178,19 @@ const Header: React.FC = () => {
                   <DropdownMenuItem asChild>
                     <Link to="/dashboard" className="flex items-center gap-2 cursor-pointer">
                       <LayoutDashboard className="w-4 h-4" />
-                      Dashboard
+                      {t.nav.dashboard}
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link to="/dashboard?tab=settings" className="flex items-center gap-2 cursor-pointer">
                       <Settings className="w-4 h-4" />
-                      Settings
+                      {t.dashboard.settings}
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 cursor-pointer text-destructive">
                     <LogOut className="w-4 h-4" />
-                    Logout
+                    {t.nav.logout}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -268,7 +268,7 @@ const Header: React.FC = () => {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <LayoutDashboard className="w-4 h-4" />
-                    Dashboard
+                    {t.nav.dashboard}
                   </Link>
                 )}
               </div>
@@ -297,12 +297,12 @@ const Header: React.FC = () => {
               {isAuthenticated ? (
                 <div className="flex flex-col gap-2">
                   <div className="px-4 py-3 rounded-xl bg-muted">
-                    <p className="text-sm text-muted-foreground">Logged in as</p>
+                    <p className="text-sm text-muted-foreground">{t.auth.signIn}</p>
                     <p className="font-medium">{user?.fullName}</p>
                   </div>
                   <Button variant="outline" className="w-full gap-2" onClick={() => { handleLogout(); setIsMenuOpen(false); }}>
                     <LogOut className="w-4 h-4" />
-                    Logout
+                    {t.nav.logout}
                   </Button>
                 </div>
               ) : (

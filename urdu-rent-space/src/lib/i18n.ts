@@ -220,6 +220,7 @@ interface DashboardTranslations {
   activeListings: string;
   totalBookings: string;
   averageRating: string;
+  overview: string;
 }
 
 interface VerificationTranslations {
@@ -321,6 +322,28 @@ interface FooterTranslations {
   tagline: string;
 }
 
+interface AdminTranslations {
+  title: string;
+  dashboard: string;
+  users: string;
+  listings: string;
+  verifications: string;
+  bookings: string;
+  categories: string;
+  totalUsers: string;
+  newUsers: string;
+  totalListings: string;
+  activeListings: string;
+  totalBookings: string;
+  pendingBookings: string;
+  totalRevenue: string;
+  pendingVerifications: string;
+  userManagement: string;
+  listingManagement: string;
+  recentUsers: string;
+  recentBookings: string;
+}
+
 export interface TranslationType {
   nav: NavTranslations;
   hero: HeroTranslations;
@@ -336,6 +359,7 @@ export interface TranslationType {
   common: CommonTranslations;
   filters: FiltersTranslations;
   footer: FooterTranslations;
+  admin: AdminTranslations;
 }
 
 export const translations: Record<Language, TranslationType> = {
@@ -560,6 +584,7 @@ export const translations: Record<Language, TranslationType> = {
       activeListings: 'Active Listings',
       totalBookings: 'Total Bookings',
       averageRating: 'Average Rating',
+      overview: 'Overview',
     },
     // Verification
     verification: {
@@ -659,6 +684,28 @@ export const translations: Record<Language, TranslationType> = {
       press: 'Press',
       copyright: '© 2025 My Rental Marketplace. All rights reserved.',
       tagline: 'Rent anything, anywhere in Pakistan',
+    },
+    // Admin
+    admin: {
+      title: 'Super Admin',
+      dashboard: 'Admin Dashboard',
+      users: 'User Management',
+      listings: 'Listing Management',
+      verifications: 'Verifications',
+      bookings: 'All Bookings',
+      categories: 'Categories',
+      totalUsers: 'Total Users',
+      newUsers: 'New Users',
+      totalListings: 'Total Listings',
+      activeListings: 'Active Listings',
+      totalBookings: 'Total Bookings',
+      pendingBookings: 'Pending Bookings',
+      totalRevenue: 'Total Revenue',
+      pendingVerifications: 'Pending Verifications',
+      userManagement: 'User Management',
+      listingManagement: 'Listing Management',
+      recentUsers: 'Recent Users',
+      recentBookings: 'Recent Bookings',
     },
   },
   ur: {
@@ -882,6 +929,7 @@ export const translations: Record<Language, TranslationType> = {
       activeListings: 'فعال اشتہارات',
       totalBookings: 'کل بکنگز',
       averageRating: 'اوسط ریٹنگ',
+      overview: 'جائزہ',
     },
     // Verification
     verification: {
@@ -981,6 +1029,28 @@ export const translations: Record<Language, TranslationType> = {
       press: 'پریس',
       copyright: '© 2025 مائی رینٹل مارکیٹ پلیس۔ جملہ حقوق محفوظ ہیں۔',
       tagline: 'پاکستان میں کچھ بھی، کہیں بھی کرایے پر لیں',
+    },
+    // Admin
+    admin: {
+      title: 'سپر ایڈمن',
+      dashboard: 'ایڈمن ڈیش بورڈ',
+      users: 'صارفین کا انتظام',
+      listings: 'اشتہارات کا انتظام',
+      verifications: 'تصدیقات',
+      bookings: 'تمام بکنگز',
+      categories: 'زمرہ جات',
+      totalUsers: 'کل صارفین',
+      newUsers: 'نئے صارفین',
+      totalListings: 'کل اشتہارات',
+      activeListings: 'فعال اشتہارات',
+      totalBookings: 'کل بکنگز',
+      pendingBookings: 'زیر التوا بکنگز',
+      totalRevenue: 'کل آمدنی',
+      pendingVerifications: 'زیر التوا تصدیقات',
+      userManagement: 'صارفین کا انتظام',
+      listingManagement: 'اشتہارات کا انتظام',
+      recentUsers: 'حالیہ صارفین',
+      recentBookings: 'حالیہ بکنگز',
     },
   },
 };

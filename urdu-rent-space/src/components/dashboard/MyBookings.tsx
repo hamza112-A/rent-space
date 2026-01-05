@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Calendar,
   User,
@@ -44,6 +45,7 @@ interface Booking {
 }
 
 const MyBookings: React.FC = () => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('incoming');
   const [incomingBookings, setIncomingBookings] = useState<Booking[]>([]);
   const [outgoingBookings, setOutgoingBookings] = useState<Booking[]>([]);
@@ -177,28 +179,28 @@ const MyBookings: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">My Bookings</h1>
-        <p className="text-muted-foreground">Manage incoming and outgoing rental requests</p>
+        <h1 className="text-2xl font-bold text-foreground">{t.dashboard.myBookings}</h1>
+        <p className="text-muted-foreground">{t.booking.receivedBookings}</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="incoming" className="gap-2">
-            <span>Incoming</span>
+            <span>{t.booking.receivedBookings}</span>
             {pendingCount > 0 && (
               <Badge variant="secondary" className="h-5 px-1.5">
                 {pendingCount}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="outgoing">My Rentals</TabsTrigger>
+          <TabsTrigger value="outgoing">{t.booking.myBookings}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="incoming" className="mt-6 space-y-4">
           {incomingBookings.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
-                <p className="text-muted-foreground">No incoming booking requests</p>
+                <p className="text-muted-foreground">{t.common.noResults}</p>
               </CardContent>
             </Card>
           ) : (
@@ -271,21 +273,21 @@ const MyBookings: React.FC = () => {
                                 className="gap-1"
                                 onClick={() => handleReject(booking._id)}
                               >
-                                <X className="h-4 w-4" /> Decline
+                                <X className="h-4 w-4" /> {t.common.cancel}
                               </Button>
                               <Button 
                                 size="sm" 
                                 className="gap-1"
                                 onClick={() => handleApprove(booking._id)}
                               >
-                                <Check className="h-4 w-4" /> Accept
+                                <Check className="h-4 w-4" /> {t.common.confirm}
                               </Button>
                             </div>
                           )}
                           
                           {(booking.status === 'approved' || booking.status === 'confirmed') && (
                             <Button size="sm" variant="outline" className="gap-1 mt-4">
-                              <MessageSquare className="h-4 w-4" /> Message
+                              <MessageSquare className="h-4 w-4" /> {t.dashboard.messages}
                             </Button>
                           )}
                         </div>
@@ -302,7 +304,7 @@ const MyBookings: React.FC = () => {
           {outgoingBookings.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
-                <p className="text-muted-foreground">You haven't made any bookings yet</p>
+                <p className="text-muted-foreground">{t.common.noResults}</p>
               </CardContent>
             </Card>
           ) : (
@@ -365,7 +367,7 @@ const MyBookings: React.FC = () => {
                           </div>
                           
                           <Button size="sm" variant="outline" className="gap-1 mt-4">
-                            View Details <ChevronRight className="h-4 w-4" />
+                            {t.listing.viewDetails} <ChevronRight className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
