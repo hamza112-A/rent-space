@@ -5,6 +5,12 @@ const Listing = require('../models/Listing');
 const asyncHandler = require('../middleware/asyncHandler');
 const { upload } = require('../middleware/upload');
 
+// @route   GET /api/v1/listings/user/my-listings (MUST be before /:id)
+router.get('/user/my-listings', protect, asyncHandler(async (req, res) => {
+  const listings = await Listing.find({ owner: req.user._id }).sort({ createdAt: -1 });
+  res.json({ success: true, data: listings });
+}));
+
 // @route   GET /api/v1/listings
 router.get('/', optionalAuth, asyncHandler(async (req, res) => {
   const { category, city, minPrice, maxPrice, search, sort, page = 1, limit = 10 } = req.query;
@@ -152,12 +158,6 @@ router.delete('/:id', protect, asyncHandler(async (req, res) => {
 
   await listing.deleteOne();
   res.json({ success: true, message: 'Listing deleted' });
-}));
-
-// @route   GET /api/v1/listings/user/my-listings
-router.get('/user/my-listings', protect, asyncHandler(async (req, res) => {
-  const listings = await Listing.find({ owner: req.user._id }).sort({ createdAt: -1 });
-  res.json({ success: true, data: listings });
 }));
 
 module.exports = router;

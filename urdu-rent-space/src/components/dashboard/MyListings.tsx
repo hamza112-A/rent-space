@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +46,7 @@ interface Listing {
 }
 
 const MyListings: React.FC = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [listings, setListings] = useState<Listing[]>([]);
@@ -79,6 +80,18 @@ const MyListings: React.FC = () => {
       toast.success('Listing deleted successfully');
     } catch (err) {
       toast.error('Failed to delete listing');
+    }
+  };
+
+  const handleStatusChange = async (listingId: string, newStatus: string) => {
+    try {
+      await listingApi.update(listingId, { status: newStatus } as any);
+      setListings(listings.map(l => 
+        l._id === listingId ? { ...l, status: newStatus } : l
+      ));
+      toast.success(`Listing ${newStatus === 'active' ? 'activated' : 'paused'} successfully`);
+    } catch (err) {
+      toast.error('Failed to update listing status');
     }
   };
 
@@ -236,28 +249,26 @@ const MyListings: React.FC = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link to={`/listing/${listing._id}`} className="gap-2 flex items-center">
-                            <Eye className="h-4 w-4" /> View
-                          </Link>
+                        <DropdownMenuItem onClick={() => navigate(`/listing/${listing._id}`)}>
+                          <Eye className="h-4 w-4 mr-2" /> View
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="gap-2">
-                          <Edit className="h-4 w-4" /> Edit
+                        <DropdownMenuItem onClick={() => navigate(`/edit-listing/${listing._id}`)}>
+                          <Edit className="h-4 w-4 mr-2" /> Edit
                         </DropdownMenuItem>
                         {listing.status === 'active' ? (
-                          <DropdownMenuItem className="gap-2">
-                            <Pause className="h-4 w-4" /> Pause
+                          <DropdownMenuItem onClick={() => handleStatusChange(listing._id, 'paused')}>
+                            <Pause className="h-4 w-4 mr-2" /> Pause
                           </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem className="gap-2">
-                            <Play className="h-4 w-4" /> Activate
+                          <DropdownMenuItem onClick={() => handleStatusChange(listing._id, 'active')}>
+                            <Play className="h-4 w-4 mr-2" /> Activate
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem 
-                          className="gap-2 text-destructive"
+                          className="text-destructive"
                           onClick={() => handleDelete(listing._id)}
                         >
-                          <Trash2 className="h-4 w-4" /> Delete
+                          <Trash2 className="h-4 w-4 mr-2" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
