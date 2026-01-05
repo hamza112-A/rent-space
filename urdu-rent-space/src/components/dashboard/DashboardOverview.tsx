@@ -34,7 +34,7 @@ interface Booking {
 interface Listing {
   _id: string;
   title: string;
-  stats?: { views: number };
+  views: number;
   status: string;
 }
 
@@ -68,7 +68,7 @@ const DashboardOverview: React.FC = () => {
         
         // Calculate stats from data or use API stats
         setStats({
-          activeListings: userStats?.activeListings ?? listings.length,
+          activeListings: userStats?.activeListings || listings.filter((l: Listing) => l.status === 'active').length,
           totalBookings: userStats?.totalBookings || bookings.length,
           totalEarnings: userStats?.totalEarnings || 0,
           profileViews: userStats?.profileViews || 0
@@ -153,7 +153,7 @@ const DashboardOverview: React.FC = () => {
 
   const statsData = [
     { 
-      label: 'Total Listings', 
+      label: 'Active Listings', 
       value: stats?.activeListings || 0,
       icon: Package,
       color: 'text-blue-500'
@@ -295,7 +295,7 @@ const DashboardOverview: React.FC = () => {
                     <div>
                       <p className="font-medium text-foreground">{listing.title}</p>
                       <p className="text-sm text-muted-foreground">
-                        {listing.stats?.views || 0} views
+                        {listing.views || 0} views
                       </p>
                     </div>
                     <Badge className={getStatusColor(listing.status)}>
