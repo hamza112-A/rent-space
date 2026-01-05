@@ -511,7 +511,7 @@ bookingSchema.statics.getStats = function(userId, role = 'renter') {
   const matchField = role === 'renter' ? 'renter' : 'owner';
   
   return this.aggregate([
-    { $match: { [matchField]: mongoose.Types.ObjectId(userId) } },
+    { $match: { [matchField]: new mongoose.Types.ObjectId(userId) } },
     {
       $group: {
         _id: null,
