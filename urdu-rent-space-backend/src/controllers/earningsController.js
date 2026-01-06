@@ -9,7 +9,7 @@ const ErrorResponse = require('../utils/errorResponse');
 // @access  Private (Owner only)
 const getEarningsSummary = asyncHandler(async (req, res, next) => {
   const { period = 'month' } = req.query;
-  const userId = req.user.id;
+  const userId = req.user._id;
 
   // Calculate date range based on period
   let startDate = new Date();
@@ -27,11 +27,11 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
       startDate = new Date(0); // All time
   }
 
-  // Get earnings data
+  // Get earnings data - payments where user is the PAYEE (owner receiving money)
   const earningsData = await Payment.aggregate([
     {
       $match: {
-        userId: userId,
+        payee: userId,
         status: 'completed',
         createdAt: { $gte: startDate }
       }
@@ -39,9 +39,9 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
     {
       $group: {
         _id: null,
-        totalEarnings: { $sum: '$amount' },
+        totalEarnings: { $sum: '$amount.total' },
         totalTransactions: { $sum: 1 },
-        avgTransactionAmount: { $avg: '$amount' }
+        avgTransactionAmount: { $avg: '$amount.total' }
       }
     }
   ]);
@@ -50,31 +50,31 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
   const pendingPayouts = await Payment.aggregate([
     {
       $match: {
-        userId: userId,
+        payee: userId,
         status: 'completed',
-        payoutStatus: { $in: ['pending', 'processing'] }
+        'payout.status': { $in: ['pending', 'processing'] }
       }
     },
     {
       $group: {
         _id: null,
-        pendingAmount: { $sum: '$amount' }
+        pendingAmount: { $sum: '$amount.total' }
       }
     }
   ]);
 
-  // Get available balance (completed payments minus processed payouts)
+  // Get processed payouts
   const processedPayouts = await Payment.aggregate([
     {
       $match: {
-        userId: userId,
-        payoutStatus: 'processed'
+        payee: userId,
+        'payout.status': 'completed'
       }
     },
     {
       $group: {
         _id: null,
-        processedAmount: { $sum: '$amount' }
+        processedAmount: { $sum: '$payout.amount' }
       }
     }
   ]);
@@ -82,7 +82,7 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
   const totalEarnings = earningsData[0]?.totalEarnings || 0;
   const pendingPayout = pendingPayouts[0]?.pendingAmount || 0;
   const processedAmount = processedPayouts[0]?.processedAmount || 0;
-  const availableBalance = totalEarnings - processedAmount - pendingPayout;
+  const availableBalance = totalEarnings - processedAmount;
 
   // Get this month's data for growth calculation
   const thisMonthStart = new Date();
@@ -92,7 +92,7 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
   const thisMonthData = await Payment.aggregate([
     {
       $match: {
-        userId: userId,
+        payee: userId,
         status: 'completed',
         createdAt: { $gte: thisMonthStart }
       }
@@ -100,7 +100,7 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
     {
       $group: {
         _id: null,
-        monthlyEarnings: { $sum: '$amount' },
+        monthlyEarnings: { $sum: '$amount.total' },
         monthlyBookings: { $sum: 1 }
       }
     }
@@ -110,7 +110,7 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
   const chartData = await Payment.aggregate([
     {
       $match: {
-        userId: userId,
+        payee: userId,
         status: 'completed',
         createdAt: { $gte: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000) }
       }
@@ -121,7 +121,7 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
           year: { $year: '$createdAt' },
           month: { $month: '$createdAt' }
         },
-        amount: { $sum: '$amount' }
+        amount: { $sum: '$amount.total' }
       }
     },
     {
@@ -157,33 +157,40 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
 // @access  Private (Owner only)
 const getEarningsTransactions = asyncHandler(async (req, res, next) => {
   const { page = 1, limit = 20, type = 'all' } = req.query;
-  const userId = req.user.id;
+  const userId = req.user._id;
 
-  let matchQuery = { userId };
+  let matchQuery = { payee: userId };
 
   if (type !== 'all') {
     matchQuery.type = type;
   }
 
   const transactions = await Payment.find(matchQuery)
-    .populate('bookingId', 'listing startDate endDate')
-    .populate({
-      path: 'bookingId',
-      populate: {
-        path: 'listing',
-        select: 'title images'
-      }
-    })
+    .populate('booking', 'startDate endDate')
+    .populate('listing', 'title images')
+    .populate('payer', 'fullName')
     .sort({ createdAt: -1 })
     .limit(limit * 1)
     .skip((page - 1) * limit);
 
   const total = await Payment.countDocuments(matchQuery);
 
+  // Transform transactions for frontend
+  const formattedTransactions = transactions.map(t => ({
+    _id: t._id,
+    type: 'earning',
+    amount: t.amount?.total || 0,
+    status: t.status,
+    createdAt: t.createdAt,
+    bookingId: {
+      listing: t.listing
+    }
+  }));
+
   res.status(200).json({
     success: true,
     data: {
-      transactions,
+      transactions: formattedTransactions,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -296,14 +303,14 @@ const calculateAvailableBalance = async (userId) => {
   const totalEarnings = await Payment.aggregate([
     {
       $match: {
-        userId: userId,
+        payee: userId,
         status: 'completed'
       }
     },
     {
       $group: {
         _id: null,
-        total: { $sum: '$amount' }
+        total: { $sum: '$amount.total' }
       }
     }
   ]);
@@ -311,14 +318,14 @@ const calculateAvailableBalance = async (userId) => {
   const processedPayouts = await Payment.aggregate([
     {
       $match: {
-        userId: userId,
-        payoutStatus: { $in: ['processed', 'processing'] }
+        payee: userId,
+        'payout.status': { $in: ['completed', 'processing'] }
       }
     },
     {
       $group: {
         _id: null,
-        total: { $sum: '$amount' }
+        total: { $sum: '$payout.amount' }
       }
     }
   ]);

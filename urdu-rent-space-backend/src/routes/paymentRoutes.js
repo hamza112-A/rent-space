@@ -117,11 +117,14 @@ router.post('/create-intent', protect, asyncHandler(async (req, res) => {
 
   // Get booking details if bookingId provided
   let booking = null;
+  let listingOwner = null;
   if (bookingId) {
-    booking = await Booking.findById(bookingId).populate('listing', 'title');
+    booking = await Booking.findById(bookingId).populate('listing', 'title owner');
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
+    // Get the owner from the booking or from the listing
+    listingOwner = booking.owner || booking.listing?.owner;
   }
 
   // Create Stripe Payment Intent
@@ -140,7 +143,7 @@ router.post('/create-intent', protect, asyncHandler(async (req, res) => {
   const payment = await Payment.create({
     booking: bookingId || null,
     payer: req.user._id,
-    payee: booking?.owner || null,
+    payee: listingOwner || null,
     listing: booking?.listing?._id || null,
     method: 'stripe',
     status: 'pending',

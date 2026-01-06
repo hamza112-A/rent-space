@@ -10,13 +10,15 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All routes require authentication and owner/both role
+// All routes require authentication
 router.use(protect);
-router.use(authorize('owner', 'both'));
 
+// Allow all authenticated users to view earnings (they'll only see their own)
 router.get('/summary', getEarningsSummary);
 router.get('/transactions', getEarningsTransactions);
-router.post('/payout', requestPayout);
+
+// Payout routes require owner/both role
+router.post('/payout', authorize('owner', 'both'), requestPayout);
 router.get('/payout-methods', getPayoutMethods);
 router.post('/payout-methods', addPayoutMethod);
 
