@@ -272,6 +272,25 @@ router.put('/:id', protect, upload.array('images', 10), asyncHandler(async (req,
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
 
+  // Parse JSON strings from FormData
+  const updateData = {};
+  for (const key in req.body) {
+    try {
+      if (typeof req.body[key] === 'string' && (req.body[key].startsWith('{') || req.body[key].startsWith('['))) {
+        updateData[key] = JSON.parse(req.body[key]);
+      } else {
+        updateData[key] = req.body[key];
+      }
+    } catch (e) {
+      updateData[key] = req.body[key];
+    }
+  }
+
+  // Handle specifications Map type - convert object to Map
+  if (updateData.specifications && typeof updateData.specifications === 'object') {
+    listing.specifications = new Map(Object.entries(updateData.specifications));
+  }
+
   if (req.files?.length) {
     const existingCount = listing.images?.length || 0;
     const uploadPromises = req.files.map(async (file, index) => {
@@ -310,10 +329,14 @@ router.put('/:id', protect, upload.array('images', 10), asyncHandler(async (req,
     
     const uploadedImages = await Promise.all(uploadPromises);
     const newImages = uploadedImages.filter(img => img !== null);
-    req.body.images = [...(listing.images || []), ...newImages];
+    updateData.images = [...(listing.images || []), ...newImages];
   }
 
-  listing = await Listing.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+  // Remove specifications from updateData to avoid Map casting error
+  const { specifications, ...restData } = updateData;
+
+  // Update listing with proper data
+  listing = await Listing.findByIdAndUpdate(req.params.id, restData, { new: true, runValidators: true });
   res.json({ success: true, data: listing });
 }));
 

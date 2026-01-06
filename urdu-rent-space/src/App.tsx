@@ -40,6 +40,7 @@ const App = () => (
               <Route path="/listings" element={<CategoryPage />} />
               <Route path="/listing/:listingId" element={<ListingDetail />} />
               <Route path="/create-listing" element={<ProtectedRoute><CreateListing /></ProtectedRoute>} />
+              <Route path="/edit-listing/:listingId" element={<ProtectedRoute><CreateListing /></ProtectedRoute>} />
               <Route path="/payment" element={<ProtectedRoute><PaymentMethods /></ProtectedRoute>} />
               <Route path="/payment/checkout" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
               <Route path="/payment/success" element={<PaymentSuccess />} />

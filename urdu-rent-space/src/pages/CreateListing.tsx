@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -128,8 +128,12 @@ const CreateListing: React.FC = () => {
   const { t } = useLanguage();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { listingId } = useParams<{ listingId: string }>();
+  const isEditMode = !!listingId;
+  
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingListing, setIsLoadingListing] = useState(isEditMode);
   const [images, setImages] = useState<string[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
@@ -154,6 +158,56 @@ const CreateListing: React.FC = () => {
 
   const selectedCategory = categories.find((c) => c.id === formData.category);
   const dynamicFields = formData.category ? categoryFields[formData.category] || [] : [];
+
+  // Load existing listing data when in edit mode
+  useEffect(() => {
+    if (isEditMode && listingId) {
+      const loadListing = async () => {
+        try {
+          setIsLoadingListing(true);
+          const response = await listingApi.getById(listingId);
+          const listing = response.data.data;
+
+          // Populate form data
+          setFormData({
+            category: listing.category || '',
+            subcategory: listing.subcategory || '',
+            title: listing.title || '',
+            description: listing.description || '',
+            location: listing.location?.address || '',
+            city: listing.location?.city || '',
+            hourlyRate: listing.pricing?.hourly?.toString() || '',
+            dailyRate: listing.pricing?.daily?.toString() || '',
+            weeklyRate: listing.pricing?.weekly?.toString() || '',
+            monthlyRate: listing.pricing?.monthly?.toString() || '',
+            instantBook: listing.availability?.instantBook || false,
+            deposit: listing.policies?.deposit?.amount?.toString() || '',
+            cancellationPolicy: listing.policies?.cancellation || 'flexible',
+            dynamicFields: listing.specifications || {},
+          });
+
+          // Load existing images
+          if (listing.images && listing.images.length > 0) {
+            setImages(listing.images.map((img: any) => img.url));
+          }
+
+          // Load blocked dates
+          if (listing.availability?.blockedDates && listing.availability.blockedDates.length > 0) {
+            setUnavailableDates(listing.availability.blockedDates.map((date: string) => new Date(date)));
+          }
+
+          setIsLoadingListing(false);
+        } catch (error: any) {
+          console.error('Error loading listing:', error);
+          toast.error(error.response?.data?.message || 'Failed to load listing');
+          setIsLoadingListing(false);
+          navigate('/dashboard');
+        }
+      };
+
+      loadListing();
+    }
+  }, [isEditMode, listingId, navigate]);
 
   const handleImageUpload = () => {
     fileInputRef.current?.click();
@@ -263,13 +317,18 @@ const CreateListing: React.FC = () => {
       });
 
       // Use the API client which handles cookies automatically
-      await listingApi.create(submitData);
+      if (isEditMode && listingId) {
+        await listingApi.update(listingId, submitData);
+        toast.success('Listing updated successfully!');
+      } else {
+        await listingApi.create(submitData);
+        toast.success('Listing created successfully!');
+      }
 
-      toast.success('Listing created successfully!');
       navigate('/dashboard');
     } catch (error: any) {
-      console.error('Error creating listing:', error);
-      const message = error.response?.data?.message || error.message || 'Failed to create listing';
+      console.error(`Error ${isEditMode ? 'updating' : 'creating'} listing:`, error);
+      const message = error.response?.data?.message || error.message || `Failed to ${isEditMode ? 'update' : 'create'} listing`;
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -301,10 +360,24 @@ const CreateListing: React.FC = () => {
               <ArrowLeft className="w-4 h-4" />
               {t.common.back}
             </Link>
-            <h1 className="text-3xl font-bold text-foreground">{t.nav.createListing}</h1>
-            <p className="text-muted-foreground mt-2">{t.listing.description}</p>
+            <h1 className="text-3xl font-bold text-foreground">
+              {isEditMode ? 'Edit Listing' : t.nav.createListing}
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              {isEditMode ? 'Update your listing details' : t.listing.description}
+            </p>
           </div>
 
+          {/* Loading state for edit mode */}
+          {isLoadingListing ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Loading listing...</p>
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Progress Steps */}
           <div className="flex items-center justify-between mb-8">
             {['Category', 'Details', 'Photos', 'Pricing', 'Availability'].map((label, idx) => (
@@ -743,12 +816,14 @@ const CreateListing: React.FC = () => {
                   </Button>
                 ) : (
                   <Button onClick={handleSubmit} disabled={isLoading}>
-                    {isLoading ? 'Publishing...' : 'Publish Listing'}
+                    {isLoading ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Publish Listing')}
                   </Button>
                 )}
               </div>
             </CardContent>
           </Card>
+            </>
+          )}
         </div>
       </div>
     </Layout>
