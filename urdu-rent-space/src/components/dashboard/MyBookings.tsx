@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Calendar,
@@ -13,7 +14,11 @@ import {
   X,
   Clock,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  MapPin,
+  Phone,
+  Mail,
+  Building
 } from 'lucide-react';
 import { bookingApi } from '@/lib/api';
 import { toast } from 'sonner';
@@ -24,23 +29,31 @@ interface Booking {
     _id: string;
     title: string;
     images?: { url: string }[];
+    location?: { address?: string; city?: string };
   };
   renter?: {
     _id: string;
     fullName: string;
     phone?: string;
+    email?: string;
   };
   owner?: {
     _id: string;
     fullName: string;
+    phone?: string;
+    email?: string;
   };
   startDate: string;
   endDate: string;
   totalPrice?: number;
   pricing?: {
     totalAmount: number;
+    subtotal?: number;
+    serviceFee?: number;
+    deposit?: number;
   };
   status: string;
+  message?: string;
   createdAt: string;
 }
 
@@ -51,6 +64,8 @@ const MyBookings: React.FC = () => {
   const [outgoingBookings, setOutgoingBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     fetchBookings();
@@ -146,6 +161,11 @@ const MyBookings: React.FC = () => {
     const end = new Date(endDate);
     const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     return `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+  };
+
+  const handleViewDetails = (booking: Booking) => {
+    setSelectedBooking(booking);
+    setDetailsOpen(true);
   };
 
   if (loading) {
@@ -366,7 +386,7 @@ const MyBookings: React.FC = () => {
                             <p className="text-xs text-muted-foreground">Total</p>
                           </div>
                           
-                          <Button size="sm" variant="outline" className="gap-1 mt-4">
+                          <Button size="sm" variant="outline" className="gap-1 mt-4" onClick={() => handleViewDetails(booking)}>
                             {t.listing.viewDetails} <ChevronRight className="h-4 w-4" />
                           </Button>
                         </div>
@@ -379,6 +399,137 @@ const MyBookings: React.FC = () => {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Booking Details Dialog */}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t.listing.viewDetails}</DialogTitle>
+          </DialogHeader>
+          {selectedBooking && (
+            <div className="space-y-4">
+              {/* Listing Info */}
+              <div className="flex gap-4">
+                <div className="w-24 h-24 rounded-lg bg-muted overflow-hidden flex-shrink-0">
+                  {selectedBooking.listing?.images?.[0]?.url ? (
+                    <img
+                      src={selectedBooking.listing.images[0].url}
+                      alt={selectedBooking.listing.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Building className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold">{selectedBooking.listing?.title}</h3>
+                  {selectedBooking.listing?.location && (
+                    <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                      <MapPin className="h-3 w-3" />
+                      {selectedBooking.listing.location.address || selectedBooking.listing.location.city}
+                    </p>
+                  )}
+                  <Badge className={`mt-2 ${getStatusColor(selectedBooking.status)}`}>
+                    {selectedBooking.status}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="bg-muted/50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                  <Calendar className="h-4 w-4" />
+                  {t.booking.selectDates}
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">{t.booking.startDate}</p>
+                    <p className="font-medium">{formatDate(selectedBooking.startDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">{t.booking.endDate}</p>
+                    <p className="font-medium">{formatDate(selectedBooking.endDate)}</p>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {t.booking.duration}: {getDuration(selectedBooking.startDate, selectedBooking.endDate)}
+                </p>
+              </div>
+
+              {/* Owner/Renter Info */}
+              <div className="bg-muted/50 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                  <User className="h-4 w-4" />
+                  {selectedBooking.owner ? t.listing.postedBy : t.auth.borrower}
+                </div>
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium">
+                    {selectedBooking.owner?.fullName || selectedBooking.renter?.fullName}
+                  </p>
+                  {(selectedBooking.owner?.phone || selectedBooking.renter?.phone) && (
+                    <p className="flex items-center gap-2 text-muted-foreground">
+                      <Phone className="h-3 w-3" />
+                      {selectedBooking.owner?.phone || selectedBooking.renter?.phone}
+                    </p>
+                  )}
+                  {(selectedBooking.owner?.email || selectedBooking.renter?.email) && (
+                    <p className="flex items-center gap-2 text-muted-foreground">
+                      <Mail className="h-3 w-3" />
+                      {selectedBooking.owner?.email || selectedBooking.renter?.email}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Message */}
+              {selectedBooking.message && (
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <p className="text-sm font-medium mb-1">{t.dashboard.messages}</p>
+                  <p className="text-sm text-muted-foreground">{selectedBooking.message}</p>
+                </div>
+              )}
+
+              {/* Pricing */}
+              <div className="border-t pt-4 space-y-2">
+                {selectedBooking.pricing?.subtotal && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t.booking.totalPrice}</span>
+                    <span>{formatCurrency(selectedBooking.pricing.subtotal)}</span>
+                  </div>
+                )}
+                {selectedBooking.pricing?.serviceFee && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t.booking.serviceFee}</span>
+                    <span>{formatCurrency(selectedBooking.pricing.serviceFee)}</span>
+                  </div>
+                )}
+                {selectedBooking.pricing?.deposit && selectedBooking.pricing.deposit > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t.listing.deposit}</span>
+                    <span>{formatCurrency(selectedBooking.pricing.deposit)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-semibold pt-2 border-t">
+                  <span>{t.booking.grandTotal}</span>
+                  <span>{formatCurrency(getTotalPrice(selectedBooking))}</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1" onClick={() => setDetailsOpen(false)}>
+                  {t.common.close}
+                </Button>
+                <Button className="flex-1" onClick={() => window.open(`/listing/${selectedBooking.listing?._id}`, '_blank')}>
+                  {t.listing.viewDetails}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
