@@ -15,6 +15,9 @@ import ListingDetail from "./pages/ListingDetail";
 import CreateListing from "./pages/CreateListing";
 import VerifyOTP from "./pages/VerifyOTP";
 import PaymentMethods from "./pages/PaymentMethods";
+import Payment from "./pages/Payment";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentFailed from "./pages/PaymentFailed";
 import Subscription from "./pages/Subscription";
 import NotFound from "./pages/NotFound";
 
@@ -38,6 +41,9 @@ const App = () => (
               <Route path="/listing/:listingId" element={<ListingDetail />} />
               <Route path="/create-listing" element={<ProtectedRoute><CreateListing /></ProtectedRoute>} />
               <Route path="/payment" element={<ProtectedRoute><PaymentMethods /></ProtectedRoute>} />
+              <Route path="/payment/checkout" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
+              <Route path="/payment/success" element={<PaymentSuccess />} />
+              <Route path="/payment/failed" element={<PaymentFailed />} />
               <Route path="/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />

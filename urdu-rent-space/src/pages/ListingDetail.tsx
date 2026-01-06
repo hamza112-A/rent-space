@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -47,6 +47,7 @@ const ListingDetail: React.FC = () => {
   const { listingId } = useParams<{ listingId: string }>();
   const { t } = useLanguage();
   const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedDates, setSelectedDates] = useState<Date[] | undefined>();
   const [isFavorite, setIsFavorite] = useState(false);
@@ -123,7 +124,7 @@ const ListingDetail: React.FC = () => {
       const startDate = sortedDates[0].toISOString();
       const endDate = sortedDates[sortedDates.length - 1].toISOString();
 
-      await bookingApi.create({
+      const response = await bookingApi.create({
         listingId,
         startDate,
         endDate,
@@ -131,7 +132,15 @@ const ListingDetail: React.FC = () => {
       });
 
       setBookingDialogOpen(false);
-      toast.success('Booking request sent successfully! The owner will respond shortly.');
+      
+      // Calculate total amount and redirect to payment
+      const pricePerDay = listing?.pricing?.daily || 0;
+      const totalAmount = Math.round(pricePerDay * selectedDates.length * 1.05);
+      const bookingId = response.data?.data?._id;
+      
+      // Redirect to payment page
+      navigate(`/payment/checkout?amount=${totalAmount}&bookingId=${bookingId}`);
+      
       setSelectedDates(undefined);
       setMessage('');
     } catch (err: any) {

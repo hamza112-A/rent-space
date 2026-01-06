@@ -210,6 +210,12 @@ export const bookingApi = {
 
 // Payments API
 export const paymentApi = {
+  createIntent: (data: { bookingId?: string; amount: number; currency?: string }) =>
+    api.post('/payments/create-intent', data),
+  confirm: (data: { paymentIntentId: string }) =>
+    api.post('/payments/confirm', data),
+  getStatus: (paymentIntentId: string) =>
+    api.get(`/payments/status/${paymentIntentId}`),
   initiate: (data: {
     bookingId: string;
     method: 'jazzcash' | 'easypaisa' | 'card' | 'bank';
@@ -218,7 +224,6 @@ export const paymentApi = {
   verify: (paymentId: string) => api.get(`/payments/${paymentId}/verify`),
   getHistory: (params?: { page?: number; limit?: number }) =>
     api.get('/payments/history', { params }),
-  // Payment methods management
   getMethods: () => api.get('/payments/methods'),
   addMethod: (data: { type: string; details: Record<string, string> }) =>
     api.post('/payments/methods', data),

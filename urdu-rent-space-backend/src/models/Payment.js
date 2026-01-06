@@ -6,51 +6,50 @@ const paymentSchema = new mongoose.Schema({
   transactionId: {
     type: String,
     unique: true,
-    required: true
+    sparse: true
+  },
+
+  // Stripe Payment Intent ID
+  stripePaymentIntentId: {
+    type: String,
+    unique: true,
+    sparse: true
   },
 
   // Related Entities
-  bookingId: {
+  booking: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Booking',
-    required: [true, 'Booking ID is required']
+    ref: 'Booking'
   },
-  userId: {
+  payer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'User ID is required']
+    required: [true, 'Payer is required']
   },
-  ownerId: {
+  payee: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'Owner ID is required']
+    ref: 'User'
+  },
+  listing: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Listing'
   },
 
   // Payment Details
   amount: {
-    type: Number,
-    required: [true, 'Amount is required'],
-    min: [0, 'Amount cannot be negative']
-  },
-  currency: {
-    type: String,
-    enum: ['PKR', 'USD'],
-    default: 'PKR'
-  },
-  
-  // Payment Breakdown
-  breakdown: {
-    subtotal: { type: Number, required: true },
+    subtotal: { type: Number, default: 0 },
     serviceFee: { type: Number, default: 0 },
     taxes: { type: Number, default: 0 },
     deposit: { type: Number, default: 0 },
-    discount: { type: Number, default: 0 }
+    discount: { type: Number, default: 0 },
+    total: { type: Number, required: true },
+    currency: { type: String, enum: ['PKR', 'USD'], default: 'PKR' }
   },
 
   // Payment Method
   method: {
     type: String,
-    enum: ['jazzcash', 'easypaisa', 'card', 'bank_transfer', 'wallet'],
+    enum: ['jazzcash', 'easypaisa', 'card', 'bank_transfer', 'wallet', 'stripe'],
     required: [true, 'Payment method is required']
   },
   
@@ -140,27 +139,28 @@ const paymentSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 paymentSchema.index({ transactionId: 1 });
-paymentSchema.index({ bookingId: 1 });
-paymentSchema.index({ userId: 1, status: 1 });
-paymentSchema.index({ ownerId: 1, status: 1 });
+paymentSchema.index({ stripePaymentIntentId: 1 });
+paymentSchema.index({ booking: 1 });
+paymentSchema.index({ payer: 1, status: 1 });
+paymentSchema.index({ payee: 1, status: 1 });
 paymentSchema.index({ status: 1, createdAt: -1 });
 paymentSchema.index({ method: 1 });
 paymentSchema.index({ 'gateway.provider': 1, 'gateway.transactionId': 1 });
 paymentSchema.index({ createdAt: -1 });
 
 // Compound indexes for common queries
-paymentSchema.index({ userId: 1, status: 1, createdAt: -1 });
-paymentSchema.index({ ownerId: 1, 'payout.status': 1, createdAt: -1 });
+paymentSchema.index({ payer: 1, status: 1, createdAt: -1 });
+paymentSchema.index({ payee: 1, 'payout.status': 1, createdAt: -1 });
 
 // Virtual for net amount (amount after fees)
 paymentSchema.virtual('netAmount').get(function() {
-  return this.amount - (this.breakdown.serviceFee || 0) - (this.breakdown.taxes || 0);
+  return this.amount.total - (this.amount.serviceFee || 0) - (this.amount.taxes || 0);
 });
 
 // Virtual for owner earnings (amount minus platform fees)
 paymentSchema.virtual('ownerEarnings').get(function() {
-  const platformFee = this.breakdown.serviceFee || 0;
-  return this.breakdown.subtotal - (platformFee * 0.7); // Owner gets 70% of service fee back
+  const platformFee = this.amount.serviceFee || 0;
+  return this.amount.subtotal - (platformFee * 0.7);
 });
 
 // Virtual for payment status display
