@@ -4,8 +4,7 @@ const bookingSchema = new mongoose.Schema({
   // Basic Information
   bookingId: {
     type: String,
-    unique: true,
-    required: true
+    unique: true
   },
 
   // Parties Involved
