@@ -279,11 +279,34 @@ userSchema.virtual('isLocked').get(function() {
   return !!(this.lockUntil && this.lockUntil > Date.now());
 });
 
-// Virtual for full verification status
+// Virtual for full verification status (all verifications complete)
 userSchema.virtual('isFullyVerified').get(function() {
   return this.verification.email.verified && 
          this.verification.phone.verified && 
-         this.verification.identity.verified;
+         this.verification.identity.verified &&
+         this.verification.biometric.verified;
+});
+
+// Virtual for basic verification status (any one verification complete)
+userSchema.virtual('isVerified').get(function() {
+  return this.verification.email.verified || 
+         this.verification.phone.verified || 
+         this.verification.identity.verified ||
+         this.verification.biometric.verified;
+});
+
+// Virtual for verification level
+userSchema.virtual('verificationLevel').get(function() {
+  let level = 0;
+  if (this.verification.email.verified) level++;
+  if (this.verification.phone.verified) level++;
+  if (this.verification.identity.verified) level++;
+  if (this.verification.biometric.verified) level++;
+  
+  if (level === 4) return 'Fully Verified';
+  if (level >= 2) return 'Verified';
+  if (level === 1) return 'Basic';
+  return 'Unverified';
 });
 
 // Pre-save middleware to hash password

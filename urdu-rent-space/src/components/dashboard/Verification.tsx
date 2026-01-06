@@ -120,6 +120,18 @@ const Verification: React.FC = () => {
   const verificationSteps = getVerificationSteps();
   const completedSteps = verificationSteps.filter((s) => s.status === 'verified').length;
   const progress = (completedSteps / verificationSteps.length) * 100;
+  
+  // Account is considered "verified" if at least one verification is complete
+  const isAccountVerified = completedSteps >= 1;
+  const isFullyVerified = completedSteps === verificationSteps.length;
+
+  // Get verification level text
+  const getVerificationLevel = () => {
+    if (completedSteps === 4) return 'Fully Verified';
+    if (completedSteps >= 2) return 'Verified';
+    if (completedSteps === 1) return 'Basic Verified';
+    return 'Unverified';
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -218,20 +230,25 @@ const Verification: React.FC = () => {
 
             <div className="flex-1 text-center md:text-left">
               <h3 className="text-xl font-semibold text-foreground">
-                {completedSteps === verificationSteps.length ? 'Fully Verified!' : 'Almost There!'}
+                {isFullyVerified ? 'Fully Verified!' : isAccountVerified ? 'Account Verified!' : 'Get Verified'}
               </h3>
               <p className="text-muted-foreground mt-1">
                 {completedSteps} of {verificationSteps.length} verification steps completed
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {completedSteps === verificationSteps.length ? (
+                {isAccountVerified ? (
                   <Badge className="bg-green-500/10 text-green-600 border-green-500/20 gap-1">
-                    <Shield className="h-3 w-3" /> Trusted Member
+                    <Shield className="h-3 w-3" /> {getVerificationLevel()}
                   </Badge>
                 ) : (
                   <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
-                    <AlertTriangle className="h-3 w-3" /> Verification Incomplete
+                    <AlertTriangle className="h-3 w-3" /> Not Verified
+                  </Badge>
+                )}
+                {isAccountVerified && !isFullyVerified && (
+                  <Badge variant="outline" className="gap-1">
+                    Complete more steps for higher trust
                   </Badge>
                 )}
               </div>
