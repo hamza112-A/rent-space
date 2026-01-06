@@ -188,16 +188,29 @@ router.post('/confirm', protect, asyncHandler(async (req, res) => {
   // Update payment status based on Stripe status
   if (paymentIntent.status === 'succeeded') {
     payment.status = 'completed';
-    payment.paidAt = new Date();
+    payment.completedAt = new Date();
     payment.transactionId = paymentIntent.id;
+    
+    // Set payout info for owner earnings
+    payment.payout = {
+      amount: payment.amount.total,
+      status: 'pending'
+    };
+    
     await payment.save();
 
     // Update booking status if linked
     if (payment.booking) {
-      await Booking.findByIdAndUpdate(payment.booking, {
+      const booking = await Booking.findByIdAndUpdate(payment.booking, {
         paymentStatus: 'paid',
         status: 'approved'
-      });
+      }, { new: true });
+      
+      // Ensure payee is set (owner of the listing)
+      if (booking && !payment.payee) {
+        payment.payee = booking.owner;
+        await payment.save();
+      }
     }
 
     return res.json({

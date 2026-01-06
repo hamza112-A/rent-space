@@ -3,13 +3,14 @@ const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
 const asyncHandler = require('../middleware/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
+const mongoose = require('mongoose');
 
 // @desc    Get earnings summary
 // @route   GET /api/v1/earnings/summary
 // @access  Private (Owner only)
 const getEarningsSummary = asyncHandler(async (req, res, next) => {
   const { period = 'month' } = req.query;
-  const userId = req.user._id;
+  const userId = new mongoose.Types.ObjectId(req.user._id);
 
   // Calculate date range based on period
   let startDate = new Date();
@@ -157,7 +158,7 @@ const getEarningsSummary = asyncHandler(async (req, res, next) => {
 // @access  Private (Owner only)
 const getEarningsTransactions = asyncHandler(async (req, res, next) => {
   const { page = 1, limit = 20, type = 'all' } = req.query;
-  const userId = req.user._id;
+  const userId = new mongoose.Types.ObjectId(req.user._id);
 
   let matchQuery = { payee: userId };
 
@@ -300,10 +301,12 @@ const addPayoutMethod = asyncHandler(async (req, res, next) => {
 
 // Helper function to calculate available balance
 const calculateAvailableBalance = async (userId) => {
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  
   const totalEarnings = await Payment.aggregate([
     {
       $match: {
-        payee: userId,
+        payee: userObjectId,
         status: 'completed'
       }
     },
@@ -318,7 +321,7 @@ const calculateAvailableBalance = async (userId) => {
   const processedPayouts = await Payment.aggregate([
     {
       $match: {
-        payee: userId,
+        payee: userObjectId,
         'payout.status': { $in: ['completed', 'processing'] }
       }
     },
