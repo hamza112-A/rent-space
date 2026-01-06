@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Calendar,
@@ -18,7 +20,8 @@ import {
   MapPin,
   Phone,
   Mail,
-  Building
+  Building,
+  Star
 } from 'lucide-react';
 import { bookingApi } from '@/lib/api';
 import { toast } from 'sonner';
@@ -53,8 +56,21 @@ interface Booking {
     deposit?: number;
   };
   status: string;
+  paymentStatus?: string;
   message?: string;
   createdAt: string;
+  reviews?: {
+    renterReview?: {
+      rating: number;
+      comment: string;
+      submittedAt: string;
+    };
+    ownerReview?: {
+      rating: number;
+      comment: string;
+      submittedAt: string;
+    };
+  };
 }
 
 const MyBookings: React.FC = () => {
@@ -66,6 +82,11 @@ const MyBookings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   useEffect(() => {
     fetchBookings();
@@ -109,6 +130,66 @@ const MyBookings: React.FC = () => {
     } catch (err) {
       toast.error('Failed to reject booking');
     }
+  };
+
+  const handleOpenReviewDialog = (booking: Booking) => {
+    setReviewBooking(booking);
+    setReviewRating(0);
+    setReviewComment('');
+    setReviewDialogOpen(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewBooking) return;
+    
+    if (reviewRating === 0) {
+      toast.error('Please select a rating');
+      return;
+    }
+    
+    if (!reviewComment.trim()) {
+      toast.error('Please write a comment');
+      return;
+    }
+
+    try {
+      setReviewSubmitting(true);
+      await bookingApi.addReview(reviewBooking._id, {
+        rating: reviewRating,
+        comment: reviewComment.trim()
+      });
+      
+      toast.success('Review submitted successfully!');
+      setReviewDialogOpen(false);
+      setReviewBooking(null);
+      setReviewRating(0);
+      setReviewComment('');
+      
+      // Refresh bookings to update review status
+      fetchBookings();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to submit review');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const canLeaveReview = (booking: Booking, isRenter: boolean): boolean => {
+    // Can only review completed bookings with paid status
+    if (booking.status !== 'completed' || booking.paymentStatus !== 'paid') {
+      return false;
+    }
+    
+    // Check if user has already reviewed
+    if (isRenter && booking.reviews?.renterReview) {
+      return false;
+    }
+    
+    if (!isRenter && booking.reviews?.ownerReview) {
+      return false;
+    }
+    
+    return true;
   };
 
   const getStatusColor = (status: string) => {
@@ -310,6 +391,17 @@ const MyBookings: React.FC = () => {
                               <MessageSquare className="h-4 w-4" /> {t.dashboard.messages}
                             </Button>
                           )}
+                          
+                          {canLeaveReview(booking, false) && (
+                            <Button 
+                              size="sm" 
+                              variant="default" 
+                              className="gap-1 mt-4"
+                              onClick={() => handleOpenReviewDialog(booking)}
+                            >
+                              <Star className="h-4 w-4" /> Leave Review
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -386,9 +478,21 @@ const MyBookings: React.FC = () => {
                             <p className="text-xs text-muted-foreground">Total</p>
                           </div>
                           
-                          <Button size="sm" variant="outline" className="gap-1 mt-4" onClick={() => handleViewDetails(booking)}>
-                            {t.listing.viewDetails} <ChevronRight className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-2 mt-4">
+                            {canLeaveReview(booking, true) && (
+                              <Button 
+                                size="sm" 
+                                variant="default" 
+                                className="gap-1"
+                                onClick={() => handleOpenReviewDialog(booking)}
+                              >
+                                <Star className="h-4 w-4" /> Leave Review
+                              </Button>
+                            )}
+                            <Button size="sm" variant="outline" className="gap-1" onClick={() => handleViewDetails(booking)}>
+                              {t.listing.viewDetails} <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -528,6 +632,85 @@ const MyBookings: React.FC = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Review Dialog */}
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Leave a Review</DialogTitle>
+            <DialogDescription>
+              Share your experience with {reviewBooking?.listing?.title}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Rating */}
+            <div className="space-y-2">
+              <Label>Rating *</Label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className="focus:outline-none transition-transform hover:scale-110"
+                  >
+                    <Star
+                      className={`h-8 w-8 ${
+                        star <= reviewRating
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              {reviewRating > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {reviewRating === 5 && 'Excellent!'}
+                  {reviewRating === 4 && 'Great!'}
+                  {reviewRating === 3 && 'Good'}
+                  {reviewRating === 2 && 'Fair'}
+                  {reviewRating === 1 && 'Poor'}
+                </p>
+              )}
+            </div>
+
+            {/* Comment */}
+            <div className="space-y-2">
+              <Label htmlFor="review-comment">Your Review *</Label>
+              <Textarea
+                id="review-comment"
+                placeholder="Share your experience... What did you like or dislike?"
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                rows={5}
+                maxLength={1000}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground text-right">
+                {reviewComment.length}/1000 characters
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReviewDialogOpen(false)}
+              disabled={reviewSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitReview}
+              disabled={reviewSubmitting || reviewRating === 0 || !reviewComment.trim()}
+            >
+              {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

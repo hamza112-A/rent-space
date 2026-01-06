@@ -194,4 +194,124 @@ router.put('/:id/status', protect, asyncHandler(async (req, res) => {
   res.json({ success: true, data: booking });
 }));
 
+// @route   POST /api/v1/bookings/:id/review
+// @desc    Submit a review for a completed booking
+// @access  Private (Renter or Owner)
+router.post('/:id/review', protect, asyncHandler(async (req, res) => {
+  const { rating, comment } = req.body;
+  const Review = require('../models/Review');
+  
+  const booking = await Booking.findById(req.params.id)
+    .populate('listing')
+    .populate('renter')
+    .populate('owner');
+
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  // Check if user is part of this booking
+  const isRenter = booking.renter._id.toString() === req.user._id.toString();
+  const isOwner = booking.owner._id.toString() === req.user._id.toString();
+
+  if (!isRenter && !isOwner) {
+    return res.status(403).json({ success: false, message: 'Not authorized to review this booking' });
+  }
+
+  // Check if booking is completed and paid
+  if (booking.status !== 'completed') {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Can only review completed bookings' 
+    });
+  }
+
+  if (booking.paymentStatus !== 'paid') {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Can only review bookings with confirmed payment' 
+    });
+  }
+
+  // Validate rating
+  if (!rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Rating must be between 1 and 5' 
+    });
+  }
+
+  if (!comment || comment.trim().length === 0) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Comment is required' 
+    });
+  }
+
+  // Determine who is reviewing whom
+  const reviewerId = req.user._id;
+  const revieweeId = isRenter ? booking.owner._id : booking.renter._id;
+
+  // Check if user has already reviewed this booking
+  const existingReview = await Review.findOne({
+    bookingId: booking._id,
+    reviewerId: reviewerId,
+    revieweeId: revieweeId
+  });
+
+  if (existingReview) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'You have already reviewed this booking' 
+    });
+  }
+
+  // Create the review
+  const review = await Review.create({
+    bookingId: booking._id,
+    listingId: booking.listing._id,
+    reviewerId: reviewerId,
+    revieweeId: revieweeId,
+    rating,
+    comment: comment.trim()
+  });
+
+  // Update booking's review status
+  if (isRenter) {
+    booking.reviews.renterReview = {
+      rating,
+      comment: comment.trim(),
+      submittedAt: new Date()
+    };
+  } else {
+    booking.reviews.ownerReview = {
+      rating,
+      comment: comment.trim(),
+      submittedAt: new Date()
+    };
+  }
+  await booking.save();
+
+  // Update listing rating
+  const Listing = require('../models/Listing');
+  const listingReviews = await Review.find({ 
+    listingId: booking.listing._id,
+    status: 'active'
+  });
+  
+  if (listingReviews.length > 0) {
+    const avgRating = listingReviews.reduce((sum, r) => sum + r.rating, 0) / listingReviews.length;
+    await Listing.findByIdAndUpdate(booking.listing._id, {
+      'rating.average': Math.round(avgRating * 10) / 10,
+      'rating.count': listingReviews.length
+    });
+  }
+
+  res.status(201).json({ 
+    success: true, 
+    data: review,
+    message: 'Review submitted successfully' 
+  });
+}));
+
 module.exports = router;

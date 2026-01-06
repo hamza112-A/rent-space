@@ -208,6 +208,8 @@ export const bookingApi = {
   cancel: (bookingId: string, data: { reason?: string }) =>
     api.put(`/bookings/${bookingId}/status`, { status: 'cancelled', ...data }),
   complete: (bookingId: string) => api.put(`/bookings/${bookingId}/status`, { status: 'completed' }),
+  addReview: (bookingId: string, data: { rating: number; comment: string }) =>
+    api.post(`/bookings/${bookingId}/review`, data),
 };
 
 // Payments API
