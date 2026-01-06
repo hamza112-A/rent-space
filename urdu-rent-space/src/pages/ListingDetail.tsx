@@ -60,6 +60,7 @@ const ListingDetail: React.FC = () => {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -130,6 +131,12 @@ const ListingDetail: React.FC = () => {
   const handleConfirmBooking = async () => {
     if (!selectedDates || selectedDates.length === 0 || !listingId || !listing) return;
     
+    // Validate disclaimer acceptance if required
+    if (listing.disclaimers?.termsAccepted?.required && !disclaimerAccepted) {
+      toast.error('Please accept the terms and conditions to proceed');
+      return;
+    }
+    
     // Check if any selected date is blocked
     const blockedDatesArray = listing.availability?.blockedDates?.map((d: string) => new Date(d)) || [];
     const isBlocked = (date: Date) => {
@@ -154,6 +161,7 @@ const ListingDetail: React.FC = () => {
         startDate,
         endDate,
         message: message || undefined,
+        disclaimerAccepted: disclaimerAccepted,
       });
 
       setBookingDialogOpen(false);
@@ -173,8 +181,10 @@ const ListingDetail: React.FC = () => {
       // Redirect to payment page
       navigate(`/payment/checkout?amount=${totalAmount}&bookingId=${bookingId}`);
       
+      // Reset form states
       setSelectedDates(undefined);
       setMessage('');
+      setDisclaimerAccepted(false);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to create booking');
     } finally {
@@ -510,6 +520,129 @@ const ListingDetail: React.FC = () => {
                 </Card>
               )}
 
+              {/* Safety Guidelines */}
+              {listing.safetyGuidelines?.categorySpecific?.length > 0 && (
+                <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+                      <Shield className="h-5 w-5" />
+                      Safety Guidelines
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-3">
+                      {listing.safetyGuidelines.categorySpecific.map((guideline: any, index: number) => (
+                        <div 
+                          key={index} 
+                          className={`p-4 rounded-lg ${
+                            guideline.mandatory 
+                              ? 'bg-amber-100 dark:bg-amber-900/30 border border-amber-300' 
+                              : 'bg-background/50'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="text-2xl">{guideline.icon}</span>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-foreground">{guideline.title}</h4>
+                                {guideline.mandatory && (
+                                  <Badge variant="destructive" className="text-xs">Required</Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1">{guideline.description}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {listing.safetyGuidelines.emergencyContact && (
+                      <>
+                        <Separator className="my-4" />
+                        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200">
+                          <h4 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
+                            <AlertCircle className="h-4 w-4" />
+                            Emergency Contact
+                          </h4>
+                          {listing.safetyGuidelines.emergencyContact.phone && (
+                            <p className="text-sm text-muted-foreground">
+                              📞 {listing.safetyGuidelines.emergencyContact.phone}
+                              {listing.safetyGuidelines.emergencyContact.available24x7 && (
+                                <Badge variant="outline" className="ml-2">24/7</Badge>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Disclaimers */}
+              {(listing.disclaimers?.damage?.enabled || 
+                listing.disclaimers?.lostItems?.enabled || 
+                listing.disclaimers?.liability?.enabled) && (
+                <Card className="border-red-200 bg-red-50/50 dark:bg-red-950/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-900 dark:text-red-100">
+                      <AlertCircle className="h-5 w-5" />
+                      Important Disclaimers
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {listing.disclaimers.damage?.enabled && (
+                      <div className="p-4 rounded-lg bg-background/50 border">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                          ⚠️ Damage Policy
+                        </h4>
+                        <p className="text-sm text-muted-foreground">{listing.disclaimers.damage.text}</p>
+                        {listing.disclaimers.damage.maxLiability && (
+                          <p className="text-sm font-medium mt-2">
+                            Maximum Liability: PKR {listing.disclaimers.damage.maxLiability.toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {listing.disclaimers.lostItems?.enabled && (
+                      <div className="p-4 rounded-lg bg-background/50 border">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                          🔍 Lost Items Policy
+                        </h4>
+                        <p className="text-sm text-muted-foreground">{listing.disclaimers.lostItems.text}</p>
+                        {listing.disclaimers.lostItems.replacementValue && (
+                          <p className="text-sm font-medium mt-2">
+                            Replacement Value: PKR {listing.disclaimers.lostItems.replacementValue.toLocaleString()}
+                          </p>
+                        )}
+                        {listing.disclaimers.lostItems.reportingTimeframe && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Must be reported within {listing.disclaimers.lostItems.reportingTimeframe}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {listing.disclaimers.liability?.enabled && (
+                      <div className="p-4 rounded-lg bg-background/50 border">
+                        <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                          🛡️ Liability Disclaimer
+                        </h4>
+                        <p className="text-sm text-muted-foreground">{listing.disclaimers.liability.text}</p>
+                      </div>
+                    )}
+
+                    {listing.disclaimers.termsAccepted?.required && (
+                      <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/20 border border-amber-300">
+                        <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                          ✓ By booking this listing, you acknowledge and accept all safety guidelines and disclaimers.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Reviews */}
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
@@ -792,11 +925,11 @@ const ListingDetail: React.FC = () => {
 
         {/* Booking Confirmation Dialog */}
         <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Confirm Your Booking</DialogTitle>
               <DialogDescription>
-                Review your booking details before confirming
+                Review your booking details and accept terms before confirming
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -809,7 +942,10 @@ const ListingDetail: React.FC = () => {
                   <p className="text-sm text-muted-foreground">{locationStr}</p>
                 </div>
               </div>
+              
               <Separator />
+              
+              {/* Pricing Details */}
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Selected Dates</span>
@@ -829,10 +965,112 @@ const ListingDetail: React.FC = () => {
                   <span className="text-primary">PKR {Math.round(dailyPrice * (selectedDates?.length || 0) * 1.05).toLocaleString()}</span>
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Optional Message */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Message to Owner (Optional)</label>
+                <Textarea
+                  placeholder="Any special requests or questions for the owner..."
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+
+              {/* Safety Guidelines Summary */}
+              {listing.safetyGuidelines?.categorySpecific?.filter((g: any) => g.mandatory).length > 0 && (
+                <>
+                  <Separator />
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200">
+                    <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      Mandatory Safety Requirements
+                    </h4>
+                    <ul className="space-y-1">
+                      {listing.safetyGuidelines.categorySpecific
+                        .filter((g: any) => g.mandatory)
+                        .slice(0, 3)
+                        .map((guideline: any, index: number) => (
+                          <li key={index} className="text-xs text-muted-foreground flex items-start gap-2">
+                            <span className="text-sm">{guideline.icon}</span>
+                            <span>{guideline.title}</span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+
+              {/* Disclaimers and Terms Acceptance */}
+              {(listing.disclaimers?.damage?.enabled || 
+                listing.disclaimers?.lostItems?.enabled || 
+                listing.disclaimers?.liability?.enabled) && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 space-y-3">
+                      <h4 className="text-sm font-semibold text-red-900 dark:text-red-100 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Important Terms & Conditions
+                      </h4>
+                      
+                      {listing.disclaimers.damage?.enabled && (
+                        <div className="text-xs text-muted-foreground">
+                          <strong className="text-foreground">⚠️ Damage Policy:</strong> {listing.disclaimers.damage.text.substring(0, 120)}...
+                        </div>
+                      )}
+                      
+                      {listing.disclaimers.lostItems?.enabled && (
+                        <div className="text-xs text-muted-foreground">
+                          <strong className="text-foreground">🔍 Lost Items:</strong> {listing.disclaimers.lostItems.text.substring(0, 120)}...
+                        </div>
+                      )}
+                      
+                      {listing.disclaimers.liability?.enabled && (
+                        <div className="text-xs text-muted-foreground">
+                          <strong className="text-foreground">🛡️ Liability:</strong> {listing.disclaimers.liability.text.substring(0, 120)}...
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Acceptance Checkbox */}
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border">
+                      <input
+                        type="checkbox"
+                        id="disclaimer-accept"
+                        checked={disclaimerAccepted}
+                        onChange={(e) => setDisclaimerAccepted(e.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                      <label 
+                        htmlFor="disclaimer-accept" 
+                        className="text-sm text-foreground cursor-pointer select-none"
+                      >
+                        I have read and agree to all <strong>safety guidelines</strong>, <strong>disclaimers</strong>, and <strong>terms & conditions</strong> for this listing. I understand my responsibilities regarding damage, lost items, and liability.
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
+            
             <DialogFooter>
-              <Button variant="outline" onClick={() => setBookingDialogOpen(false)}>{t.common.cancel}</Button>
-              <Button onClick={handleConfirmBooking} disabled={bookingLoading}>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setBookingDialogOpen(false);
+                  setDisclaimerAccepted(false);
+                }}
+              >
+                {t.common.cancel}
+              </Button>
+              <Button 
+                onClick={handleConfirmBooking} 
+                disabled={bookingLoading || (listing.disclaimers?.termsAccepted?.required && !disclaimerAccepted)}
+              >
                 {bookingLoading ? t.common.loading : (
                   <>
                     <CheckCircle2 className="h-4 w-4 mr-2" />

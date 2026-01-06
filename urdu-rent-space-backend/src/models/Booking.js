@@ -227,6 +227,15 @@ const bookingSchema = new mongoose.Schema({
     }
   },
 
+  // Terms & Disclaimer Acceptance
+  termsAcceptance: {
+    accepted: { type: Boolean, default: false },
+    acceptedAt: Date,
+    ipAddress: String,
+    userAgent: String,
+    disclaimersVersion: String // Track which version of disclaimers were accepted
+  },
+
   // Important Dates
   requestedAt: { type: Date, default: Date.now },
   approvedAt: Date,

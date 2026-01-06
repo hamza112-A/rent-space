@@ -198,6 +198,7 @@ export const bookingApi = {
     startDate: string;
     endDate: string;
     message?: string;
+    disclaimerAccepted?: boolean;
   }) => api.post('/bookings', data),
   getById: (bookingId: string) => api.get(`/bookings/${bookingId}`),
   getMyBookings: (params?: { page?: number; limit?: number; status?: string; type?: 'renter' | 'owner' }) =>

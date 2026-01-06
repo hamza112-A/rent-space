@@ -5,6 +5,27 @@ const Listing = require('../models/Listing');
 const asyncHandler = require('../middleware/asyncHandler');
 const { upload } = require('../middleware/upload');
 const { uploadToCloudinary } = require('../services/uploadService');
+const { getSafetyGuidelinesForCategory, getDefaultDisclaimers } = require('../utils/safetyGuidelines');
+
+// @route   GET /api/v1/listings/safety-guidelines/:category
+// @desc    Get category-specific safety guidelines templates
+// @access  Public
+router.get('/safety-guidelines/:category', asyncHandler(async (req, res) => {
+  const { category } = req.params;
+  
+  const guidelines = getSafetyGuidelinesForCategory(category);
+  const disclaimers = getDefaultDisclaimers(category);
+  
+  res.json({
+    success: true,
+    data: {
+      safetyGuidelines: {
+        categorySpecific: guidelines
+      },
+      disclaimers
+    }
+  });
+}));
 
 // @route   GET /api/v1/listings/user/my-listings (MUST be before /:id)
 // Only owners can have listings

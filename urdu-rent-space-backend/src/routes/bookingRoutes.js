@@ -62,7 +62,7 @@ router.get('/:id', protect, asyncHandler(async (req, res) => {
 // @route   POST /api/v1/bookings
 // Only borrowers can create bookings (rent items)
 router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
-  const { listingId, startDate, endDate, message } = req.body;
+  const { listingId, startDate, endDate, message, disclaimerAccepted } = req.body;
 
   const listing = await Listing.findById(listingId);
   if (!listing) {
@@ -137,6 +137,15 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
   const serviceFee = Math.round(subtotal * 0.05); // 5% service fee
   const totalAmount = subtotal + serviceFee;
 
+  // Prepare terms acceptance data
+  const termsAcceptance = disclaimerAccepted ? {
+    accepted: true,
+    acceptedAt: new Date(),
+    ipAddress: req.ip || req.connection.remoteAddress,
+    userAgent: req.headers['user-agent'],
+    disclaimersVersion: listing.disclaimers?.termsAccepted?.lastUpdated || new Date()
+  } : undefined;
+
   const booking = await Booking.create({
     listing: listingId,
     renter: req.user._id,
@@ -157,6 +166,7 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
       currency: listing.pricing?.currency || 'PKR'
     },
     message,
+    termsAcceptance,
     status: 'pending'
   });
 
