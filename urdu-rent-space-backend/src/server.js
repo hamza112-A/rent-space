@@ -33,6 +33,7 @@ const subscriptionRoutes = require('./routes/subscriptionRoutes');
 const earningsRoutes = require('./routes/earningsRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const disputeRoutes = require('./routes/disputeRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -149,6 +150,7 @@ app.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes);
 app.use(`${API_PREFIX}/earnings`, earningsRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
+app.use(`${API_PREFIX}/disputes`, disputeRoutes);
 
 // Socket.IO connection handling
 socketHandler(io);

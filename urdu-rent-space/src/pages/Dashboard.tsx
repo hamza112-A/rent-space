@@ -21,7 +21,8 @@ import {
   CalendarDays,
   TrendingUp,
   Tag,
-  MessageSquare
+  MessageSquare,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -32,6 +33,7 @@ import Verification from '@/components/dashboard/Verification';
 import AccountSettings from '@/components/dashboard/AccountSettings';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import Messages from '@/components/dashboard/Messages';
+import Disputes from '@/components/dashboard/Disputes';
 // Admin components
 import AdminDashboard from '@/components/dashboard/admin/AdminDashboard';
 import AdminUsers from '@/components/dashboard/admin/AdminUsers';
@@ -40,6 +42,7 @@ import AdminVerifications from '@/components/dashboard/admin/AdminVerifications'
 import AdminBookings from '@/components/dashboard/admin/AdminBookings';
 import AdminAnalytics from '@/components/dashboard/admin/AdminAnalytics';
 import AdminCategories from '@/components/dashboard/admin/AdminCategories';
+import AdminDisputes from '@/components/dashboard/admin/AdminDisputes';
 
 const Dashboard: React.FC = () => {
   const { t, isRTL } = useLanguage();
@@ -57,6 +60,7 @@ const Dashboard: React.FC = () => {
     { id: 'listings', label: t.dashboard.myListings, icon: Package, roles: ['owner', 'both'] },
     { id: 'bookings', label: t.dashboard.myBookings, icon: Calendar, roles: ['owner', 'borrower', 'both'] },
     { id: 'messages', label: t.dashboard.messages, icon: MessageSquare, roles: ['owner', 'borrower', 'both'] },
+    { id: 'disputes', label: 'Disputes', icon: AlertTriangle, roles: ['owner', 'borrower', 'both'] },
     { id: 'earnings', label: t.dashboard.earnings, icon: DollarSign, roles: ['owner', 'both'] },
     { id: 'verification', label: t.dashboard.verification, icon: Shield, roles: ['owner', 'borrower', 'both'] },
     { id: 'settings', label: t.dashboard.settings, icon: Settings, roles: ['owner', 'borrower', 'both'] },
@@ -68,6 +72,7 @@ const Dashboard: React.FC = () => {
     { id: 'admin-listings', label: t.admin?.listings || 'Listing Management', icon: Building2 },
     { id: 'admin-verifications', label: t.admin?.verifications || 'Verifications', icon: CheckCircle },
     { id: 'admin-bookings', label: t.admin?.bookings || 'All Bookings', icon: CalendarDays },
+    { id: 'admin-disputes', label: 'Dispute Management', icon: AlertTriangle },
     { id: 'admin-analytics', label: t.dashboard.analytics, icon: TrendingUp },
     { id: 'admin-categories', label: t.admin?.categories || 'Categories', icon: Tag },
   ];
@@ -186,6 +191,7 @@ const Dashboard: React.FC = () => {
               {activeTab === 'listings' && isOwner && <MyListings />}
               {activeTab === 'bookings' && <MyBookings />}
               {activeTab === 'messages' && <Messages />}
+              {activeTab === 'disputes' && <Disputes />}
               {activeTab === 'earnings' && isOwner && <Earnings />}
               {activeTab === 'verification' && <Verification />}
               {activeTab === 'settings' && <AccountSettings />}
@@ -197,6 +203,7 @@ const Dashboard: React.FC = () => {
                   {activeTab === 'admin-listings' && <AdminListings />}
                   {activeTab === 'admin-verifications' && <AdminVerifications />}
                   {activeTab === 'admin-bookings' && <AdminBookings />}
+                  {activeTab === 'admin-disputes' && <AdminDisputes />}
                   {activeTab === 'admin-analytics' && <AdminAnalytics />}
                   {activeTab === 'admin-categories' && <AdminCategories />}
                 </>

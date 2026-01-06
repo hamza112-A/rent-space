@@ -60,7 +60,14 @@ const authorize = (...roles) => {
       return next(new ErrorResponse('Not authorized to access this route', 401));
     }
 
-    if (!roles.includes(req.user.role) && !req.user.isAdmin) {
+    // Check if any of the required roles match
+    const hasRequiredRole = roles.some(role => {
+      if (role === 'superadmin') return req.user.isSuperAdmin;
+      if (role === 'admin') return req.user.isAdmin || req.user.isSuperAdmin;
+      return req.user.role === role;
+    });
+
+    if (!hasRequiredRole) {
       return next(new ErrorResponse(`User role ${req.user.role} is not authorized to access this route`, 403));
     }
 
