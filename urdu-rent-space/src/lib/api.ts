@@ -187,6 +187,8 @@ export const listingApi = {
     api.get('/listings/favorites', { params }),
   report: (listingId: string, data: { reason: string; description: string }) =>
     api.post(`/listings/${listingId}/report`, data),
+  getReviews: (listingId: string, params?: { page?: number; limit?: number; sort?: string }) =>
+    api.get(`/listings/${listingId}/reviews`, { params }),
 };
 
 // Bookings API

@@ -312,4 +312,50 @@ router.delete('/:id', protect, asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Listing deleted' });
 }));
 
+// @route   GET /api/v1/listings/:id/reviews
+// @desc    Get reviews for a listing
+// @access  Public
+router.get('/:id/reviews', optionalAuth, asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10, sort = 'newest' } = req.query;
+  const Review = require('../models/Review');
+  
+  const listing = await Listing.findById(req.params.id);
+  if (!listing) {
+    return res.status(404).json({ success: false, message: 'Listing not found' });
+  }
+
+  // Sort options
+  const sortOptions = {
+    'newest': { createdAt: -1 },
+    'oldest': { createdAt: 1 },
+    'highest': { rating: -1 },
+    'lowest': { rating: 1 },
+    'helpful': { 'helpfulVotes.count': -1 }
+  };
+
+  const query = { 
+    listingId: req.params.id,
+    status: 'active'
+  };
+
+  const reviews = await Review.find(query)
+    .populate('reviewerId', 'fullName profileImage')
+    .sort(sortOptions[sort] || sortOptions['newest'])
+    .skip((page - 1) * limit)
+    .limit(Number(limit));
+
+  const total = await Review.countDocuments(query);
+
+  res.json({
+    success: true,
+    data: reviews,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      pages: Math.ceil(total / limit)
+    }
+  });
+}));
+
 module.exports = router;

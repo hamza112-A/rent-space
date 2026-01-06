@@ -58,6 +58,8 @@ const ListingDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -79,18 +81,28 @@ const ListingDetail: React.FC = () => {
     fetchListing();
   }, [listingId]);
 
-  // Mock reviews and similar listings for now (can be fetched from API later)
-  const reviews = [
-    {
-      id: '1',
-      user: 'Sara Ali',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100',
-      rating: 5,
-      date: 'December 2025',
-      comment: 'Amazing experience! Very clean and exactly as described.',
-    },
-  ];
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!listingId) return;
+      
+      try {
+        setReviewsLoading(true);
+        const response = await listingApi.getReviews(listingId, { limit: 5 });
+        setReviews(response.data.data || []);
+      } catch (err: any) {
+        console.error('Failed to fetch reviews:', err);
+        // Don't show error to user, just keep reviews empty
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
 
+    if (listingId) {
+      fetchReviews();
+    }
+  }, [listingId]);
+
+  // Similar listings for now (can be fetched from API later)
   const similarListings: any[] = [];
 
   const nextImage = () => {
@@ -508,21 +520,31 @@ const ListingDetail: React.FC = () => {
                   <Button variant="outline" size="sm">See All</Button>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {reviews.length === 0 ? (
+                  {reviewsLoading ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-24 w-full" />
+                      <Skeleton className="h-24 w-full" />
+                    </div>
+                  ) : reviews.length === 0 ? (
                     <p className="text-muted-foreground text-center py-4">No reviews yet</p>
                   ) : (
                     reviews.map((review) => (
-                    <div key={review.id} className="p-4 rounded-lg bg-muted/50">
+                    <div key={review._id} className="p-4 rounded-lg bg-muted/50">
                       <div className="flex items-start gap-3">
                         <Avatar>
-                          <AvatarImage src={review.avatar} />
-                          <AvatarFallback>{review.user[0]}</AvatarFallback>
+                          <AvatarImage src={review.reviewerId?.profileImage?.url} />
+                          <AvatarFallback>{review.reviewerId?.fullName?.[0] || 'U'}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-medium text-foreground">{review.user}</p>
-                              <p className="text-sm text-muted-foreground">{review.date}</p>
+                              <p className="font-medium text-foreground">{review.reviewerId?.fullName || 'Anonymous'}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(review.createdAt).toLocaleDateString('en-US', { 
+                                  month: 'long', 
+                                  year: 'numeric' 
+                                })}
+                              </p>
                             </div>
                             <div className="flex items-center gap-1">
                               {[...Array(review.rating)].map((_, i) => (
