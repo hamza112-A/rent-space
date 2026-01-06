@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
-import { categories, getCategoryById } from '@/lib/categories';
+import { getCategoryById } from '@/lib/categories';
 import { listingApi } from '@/lib/api';
 import {
   Search,
@@ -18,7 +18,6 @@ import {
   Filter,
   Grid3X3,
   List,
-  ChevronDown,
   CheckCircle2,
   SlidersHorizontal,
   X,
@@ -70,49 +69,249 @@ interface Listing {
   availability?: { instantBook?: boolean };
 }
 
+// Debounce hook for live search
+const useDebounce = <T,>(value: T, delay: number): T => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+
+  return debouncedValue;
+};
+
+// Price Range Slider Component with live preview
+interface PriceRangeSliderProps {
+  value: number[];
+  onChange: (value: number[]) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
+  value,
+  onChange,
+  min = 0,
+  max = 200000,
+  step = 1000,
+}) => {
+  const [localValue, setLocalValue] = useState(value);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Sync local value with prop when not dragging
+  useEffect(() => {
+    if (!isDragging) {
+      setLocalValue(value);
+    }
+  }, [value, isDragging]);
+
+  const handleSliderChange = (newValue: number[]) => {
+    setLocalValue(newValue);
+    onChange(newValue);
+  };
+
+  const handleInputChange = (index: number, inputValue: string) => {
+    const numValue = parseInt(inputValue) || 0;
+    const newValue = [...localValue];
+    newValue[index] = Math.max(min, Math.min(max, numValue));
+    
+    // Ensure min <= max
+    if (index === 0 && newValue[0] > newValue[1]) {
+      newValue[0] = newValue[1];
+    } else if (index === 1 && newValue[1] < newValue[0]) {
+      newValue[1] = newValue[0];
+    }
+    
+    setLocalValue(newValue);
+    onChange(newValue);
+  };
+
+  const formatPrice = (price: number) => {
+    if (price >= 100000) {
+      return `${(price / 100000).toFixed(1)}L`;
+    } else if (price >= 1000) {
+      return `${(price / 1000).toFixed(0)}K`;
+    }
+    return price.toString();
+  };
+
+  // Quick select presets
+  const presets = [
+    { label: 'Under 10K', range: [0, 10000] },
+    { label: '10K - 50K', range: [10000, 50000] },
+    { label: '50K - 1L', range: [50000, 100000] },
+    { label: '1L+', range: [100000, 200000] },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Live Price Display */}
+      <div className="flex items-center justify-between">
+        <div className="text-center">
+          <span className="text-xs text-muted-foreground block">Min</span>
+          <span className={`text-lg font-bold transition-colors ${isDragging ? 'text-primary' : 'text-foreground'}`}>
+            PKR {localValue[0].toLocaleString()}
+          </span>
+        </div>
+        <div className="flex-1 mx-4 border-t border-dashed border-muted-foreground/30" />
+        <div className="text-center">
+          <span className="text-xs text-muted-foreground block">Max</span>
+          <span className={`text-lg font-bold transition-colors ${isDragging ? 'text-primary' : 'text-foreground'}`}>
+            PKR {localValue[1].toLocaleString()}
+          </span>
+        </div>
+      </div>
+
+      {/* Dual Range Slider */}
+      <div className="relative pt-2 pb-4">
+        <Slider
+          value={localValue}
+          onValueChange={handleSliderChange}
+          onPointerDown={() => setIsDragging(true)}
+          onPointerUp={() => setIsDragging(false)}
+          min={min}
+          max={max}
+          step={step}
+          className="cursor-pointer"
+        />
+        {/* Scale markers */}
+        <div className="flex justify-between mt-1 px-1">
+          <span className="text-[10px] text-muted-foreground">0</span>
+          <span className="text-[10px] text-muted-foreground">50K</span>
+          <span className="text-[10px] text-muted-foreground">1L</span>
+          <span className="text-[10px] text-muted-foreground">1.5L</span>
+          <span className="text-[10px] text-muted-foreground">2L</span>
+        </div>
+      </div>
+
+      {/* Manual Input Fields */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <Input
+            type="number"
+            value={localValue[0]}
+            onChange={(e) => handleInputChange(0, e.target.value)}
+            className="text-center text-sm"
+            placeholder="Min"
+          />
+        </div>
+        <span className="text-muted-foreground font-medium">—</span>
+        <div className="flex-1">
+          <Input
+            type="number"
+            value={localValue[1]}
+            onChange={(e) => handleInputChange(1, e.target.value)}
+            className="text-center text-sm"
+            placeholder="Max"
+          />
+        </div>
+      </div>
+
+      {/* Quick Presets */}
+      <div className="flex flex-wrap gap-2">
+        {presets.map((preset) => {
+          const isActive = localValue[0] === preset.range[0] && localValue[1] === preset.range[1];
+          return (
+            <Button
+              key={preset.label}
+              variant={isActive ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-7 px-2"
+              onClick={() => onChange(preset.range)}
+            >
+              {preset.label}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const CategoryPage: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const { t } = useLanguage();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [priceRange, setPriceRange] = useState([0, 200000]);
-  const [showFilters, setShowFilters] = useState(false);
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState('newest');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [locationQuery, setLocationQuery] = useState('');
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [instantBookOnly, setInstantBookOnly] = useState(false);
+
+  // Debounce search inputs (300ms delay)
+  const debouncedSearch = useDebounce(searchQuery, 300);
+  const debouncedLocation = useDebounce(locationQuery, 300);
+  // Debounce price range (200ms for smoother slider experience)
+  const debouncedPriceRange = useDebounce(priceRange, 200);
 
   const category = categoryId ? getCategoryById(categoryId) : null;
   const CategoryIcon = category ? categoryIcons[category.id] || Building2 : Building2;
 
-  useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        setLoading(true);
-        const params: any = { limit: 50 };
-        if (categoryId) params.category = categoryId;
-        if (selectedSubcategory) params.subcategory = selectedSubcategory;
-        if (sortBy) params.sort = sortBy;
-        
-        const response = await listingApi.search(params);
-        setListings(response.data?.data || []);
-      } catch (err) {
-        console.error('Failed to fetch listings:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchListings();
-  }, [categoryId, selectedSubcategory, sortBy]);
+  const fetchListings = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params: any = { limit: 50 };
+      if (categoryId) params.category = categoryId;
+      if (selectedSubcategory) params.subcategory = selectedSubcategory;
+      if (sortBy) params.sort = sortBy;
+      if (debouncedSearch) params.query = debouncedSearch;
+      if (debouncedLocation) params.location = debouncedLocation;
+      
+      const response = await listingApi.search(params);
+      setListings(response.data?.data || []);
+    } catch (err) {
+      console.error('Failed to fetch listings:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [categoryId, selectedSubcategory, sortBy, debouncedSearch, debouncedLocation]);
 
-  // Filter listings by price range (client-side)
+  useEffect(() => {
+    fetchListings();
+  }, [fetchListings]);
+
+  // Filter listings by price range, verified, instant book (client-side with debounced values)
   const filteredListings = listings.filter((listing) => {
     const price = listing.pricing?.daily || listing.pricing?.hourly || 0;
-    if (price < priceRange[0] || price > priceRange[1]) return false;
+    if (price < debouncedPriceRange[0] || price > debouncedPriceRange[1]) return false;
+    if (verifiedOnly && !listing.verified) return false;
+    if (instantBookOnly && !listing.availability?.instantBook) return false;
     return true;
   });
 
+  // Check if any filters are active
+  const hasActiveFilters = priceRange[0] > 0 || priceRange[1] < 200000 || selectedSubcategory || verifiedOnly || instantBookOnly;
+
+  const resetFilters = () => {
+    setPriceRange([0, 200000]);
+    setSelectedSubcategory(null);
+    setVerifiedOnly(false);
+    setInstantBookOnly(false);
+  };
+
   const FilterContent = () => (
     <div className="space-y-6">
+      {/* Active Filters Count */}
+      {hasActiveFilters && (
+        <div className="flex items-center justify-between p-2 bg-primary/10 rounded-lg">
+          <span className="text-sm text-primary font-medium">
+            Filters active
+          </span>
+          <Button variant="ghost" size="sm" onClick={resetFilters} className="h-6 text-xs">
+            Clear all
+          </Button>
+        </div>
+      )}
+
       {/* Subcategories */}
       {category && (
         <div>
@@ -131,37 +330,30 @@ const CategoryPage: React.FC = () => {
         </div>
       )}
 
-      {/* Price Range */}
+      {/* Price Range - Enhanced Slider */}
       <div>
-        <h4 className="font-semibold mb-3">{t.filters.priceRange}</h4>
-        <Slider
+        <h4 className="font-semibold mb-3 flex items-center gap-2">
+          {t.filters.priceRange}
+          {(priceRange[0] > 0 || priceRange[1] < 200000) && (
+            <Badge variant="secondary" className="text-xs">Active</Badge>
+          )}
+        </h4>
+        <PriceRangeSlider
           value={priceRange}
-          onValueChange={setPriceRange}
+          onChange={setPriceRange}
+          min={0}
           max={200000}
           step={1000}
-          className="mb-4"
         />
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            value={priceRange[0]}
-            onChange={(e) => setPriceRange([parseInt(e.target.value) || 0, priceRange[1]])}
-            className="w-24"
-          />
-          <span className="text-muted-foreground">-</span>
-          <Input
-            type="number"
-            value={priceRange[1]}
-            onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value) || 200000])}
-            className="w-24"
-          />
-        </div>
       </div>
 
       {/* Verified Only */}
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
-          <Checkbox />
+          <Checkbox 
+            checked={verifiedOnly}
+            onCheckedChange={(checked) => setVerifiedOnly(checked === true)}
+          />
           <span className="text-sm">{t.filters.verified}</span>
         </label>
       </div>
@@ -169,7 +361,10 @@ const CategoryPage: React.FC = () => {
       {/* Instant Book */}
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
-          <Checkbox />
+          <Checkbox 
+            checked={instantBookOnly}
+            onCheckedChange={(checked) => setInstantBookOnly(checked === true)}
+          />
           <span className="text-sm">{t.filters.instantBook}</span>
         </label>
       </div>
@@ -188,13 +383,9 @@ const CategoryPage: React.FC = () => {
       </div>
 
       <div className="flex gap-2 pt-4">
-        <Button variant="outline" className="flex-1" onClick={() => {
-          setPriceRange([0, 200000]);
-          setSelectedSubcategory(null);
-        }}>
+        <Button variant="outline" className="flex-1" onClick={resetFilters}>
           {t.filters.reset}
         </Button>
-        <Button className="flex-1">{t.filters.apply}</Button>
       </div>
     </div>
   );
@@ -222,17 +413,35 @@ const CategoryPage: React.FC = () => {
             </div>
 
             {/* Search */}
-            <div className="bg-card rounded-xl p-2 max-w-2xl">
+            <div className="bg-card rounded-xl p-2 max-w-2xl shadow-lg">
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input placeholder={t.hero.searchPlaceholder} className="pl-10 border-0 bg-muted/50" />
+                  <Input 
+                    placeholder={t.hero.searchPlaceholder} 
+                    className="pl-10 border border-input bg-background text-foreground"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
                 </div>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input placeholder={t.hero.locationPlaceholder} className="pl-10 border-0 bg-muted/50 w-40" />
+                  <Input 
+                    placeholder={t.hero.locationPlaceholder} 
+                    className="pl-10 border border-input bg-background text-foreground w-40"
+                    value={locationQuery}
+                    onChange={(e) => setLocationQuery(e.target.value)}
+                  />
                 </div>
-                <Button>{t.hero.searchButton}</Button>
+                {(searchQuery || locationQuery) && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => { setSearchQuery(''); setLocationQuery(''); }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </div>
           </div>

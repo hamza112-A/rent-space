@@ -14,23 +14,47 @@ router.get('/user/my-listings', protect, asyncHandler(async (req, res) => {
 
 // @route   GET /api/v1/listings
 router.get('/', optionalAuth, asyncHandler(async (req, res) => {
-  const { category, city, minPrice, maxPrice, search, sort, page = 1, limit = 10 } = req.query;
+  const { category, city, location, minPrice, maxPrice, search, query, sort, page = 1, limit = 10 } = req.query;
   
-  const query = { status: 'active' };
+  const dbQuery = { status: 'active' };
   
-  if (category) query.category = category;
-  if (city) query['location.city'] = new RegExp(city, 'i');
-  if (minPrice || maxPrice) {
-    query['pricing.daily'] = {};
-    if (minPrice) query['pricing.daily'].$gte = Number(minPrice);
-    if (maxPrice) query['pricing.daily'].$lte = Number(maxPrice);
+  if (category) dbQuery.category = category;
+  
+  // Handle location search (city or area)
+  if (city || location) {
+    const locationSearch = city || location;
+    dbQuery.$or = dbQuery.$or || [];
+    dbQuery.$or.push(
+      { 'location.city': new RegExp(locationSearch, 'i') },
+      { 'location.area': new RegExp(locationSearch, 'i') }
+    );
   }
-  if (search) {
-    query.$or = [
-      { title: new RegExp(search, 'i') },
-      { titleUrdu: new RegExp(search, 'i') },
-      { description: new RegExp(search, 'i') }
+  
+  if (minPrice || maxPrice) {
+    dbQuery['pricing.daily'] = {};
+    if (minPrice) dbQuery['pricing.daily'].$gte = Number(minPrice);
+    if (maxPrice) dbQuery['pricing.daily'].$lte = Number(maxPrice);
+  }
+  
+  // Handle search query (supports both 'search' and 'query' params)
+  const searchTerm = search || query;
+  if (searchTerm) {
+    const searchConditions = [
+      { title: new RegExp(searchTerm, 'i') },
+      { titleUrdu: new RegExp(searchTerm, 'i') },
+      { description: new RegExp(searchTerm, 'i') }
     ];
+    
+    if (dbQuery.$or) {
+      // If we already have $or conditions (from location), use $and to combine
+      dbQuery.$and = [
+        { $or: dbQuery.$or },
+        { $or: searchConditions }
+      ];
+      delete dbQuery.$or;
+    } else {
+      dbQuery.$or = searchConditions;
+    }
   }
 
   const sortOptions = {
@@ -40,13 +64,13 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
     'rating': { 'rating.average': -1 }
   };
 
-  const listings = await Listing.find(query)
+  const listings = await Listing.find(dbQuery)
     .populate('owner', 'fullName profileImage verificationLevel')
     .sort(sortOptions[sort] || { createdAt: -1 })
     .skip((page - 1) * limit)
     .limit(Number(limit));
 
-  const total = await Listing.countDocuments(query);
+  const total = await Listing.countDocuments(dbQuery);
 
   res.json({
     success: true,
