@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +11,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { 
   Menu, 
   X, 
@@ -28,7 +35,9 @@ import {
   Ship,
   Plane,
   LogOut,
-  Settings
+  Settings,
+  MapPin,
+  TrendingUp
 } from 'lucide-react';
 import { categories } from '@/lib/categories';
 
@@ -50,10 +59,31 @@ const Header: React.FC = () => {
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isScrolled, setIsScrolled] = React.useState(false);
+  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [locationQuery, setLocationQuery] = React.useState('');
 
   const handleLogout = async () => {
     await logout();
     navigate('/');
+  };
+
+  const handleSearch = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (searchQuery.trim() || locationQuery.trim()) {
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) params.set('q', searchQuery.trim());
+      if (locationQuery.trim()) params.set('location', locationQuery.trim());
+      navigate(`/listings?${params.toString()}`);
+      setIsSearchOpen(false);
+      setSearchQuery('');
+      setLocationQuery('');
+    }
+  };
+
+  const handleQuickSearch = (category: string) => {
+    navigate(`/category/${category}`);
+    setIsSearchOpen(false);
   };
 
   React.useEffect(() => {
@@ -133,7 +163,12 @@ const Header: React.FC = () => {
           {/* Desktop Actions */}
           <div className="hidden lg:flex items-center gap-3">
             {/* Search */}
-            <Button variant="ghost" size="icon" className={isScrolled || !isHome ? '' : 'text-card hover:bg-card/10'}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={isScrolled || !isHome ? '' : 'text-card hover:bg-card/10'}
+              onClick={() => setIsSearchOpen(true)}
+            >
               <Search className="w-5 h-5" />
             </Button>
 
@@ -236,14 +271,16 @@ const Header: React.FC = () => {
           <div className="container mx-auto px-4 py-4">
             <div className="flex flex-col gap-4">
               {/* Search */}
-              <div className="relative">
+              <form onSubmit={(e) => { e.preventDefault(); handleSearch(); setIsMenuOpen(false); }} className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder={t.nav.search}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
                 />
-              </div>
+              </form>
 
               {/* Navigation Links */}
               <div className="flex flex-col gap-2">
@@ -331,6 +368,75 @@ const Header: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Search Dialog */}
+      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              {t.nav.search}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSearch} className="space-y-4">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder={t.hero.searchPlaceholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+                autoFocus
+              />
+            </div>
+            
+            {/* Location Input */}
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder={t.hero.locationPlaceholder}
+                value={locationQuery}
+                onChange={(e) => setLocationQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {/* Search Button */}
+            <Button type="submit" className="w-full gap-2">
+              <Search className="w-4 h-4" />
+              {t.hero.searchButton}
+            </Button>
+          </form>
+
+          {/* Quick Categories */}
+          <div className="pt-4 border-t">
+            <p className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Popular Categories
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {categories.slice(0, 6).map((category) => {
+                const Icon = categoryIcons[category.id] || Building2;
+                return (
+                  <Button
+                    key={category.id}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => handleQuickSearch(category.id)}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {t.categories[category.nameKey as keyof typeof t.categories]}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 };
