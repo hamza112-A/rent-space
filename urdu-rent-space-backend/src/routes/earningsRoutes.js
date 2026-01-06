@@ -18,8 +18,8 @@ router.use(ownerOnly);
 router.get('/summary', getEarningsSummary);
 router.get('/transactions', getEarningsTransactions);
 
-// Payout routes
-router.post('/payout', authorize('owner', 'both'), requestPayout);
+// Payout routes - already protected by ownerOnly middleware above
+router.post('/payout', requestPayout);
 router.get('/payout-methods', getPayoutMethods);
 router.post('/payout-methods', addPayoutMethod);
 
