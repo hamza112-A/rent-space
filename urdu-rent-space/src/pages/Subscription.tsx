@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { subscriptionApi, paymentApi } from '@/lib/api';
 import {
   ArrowLeft,
   Check,
-  X,
   Crown,
   Zap,
   Shield,
@@ -19,155 +21,207 @@ import {
   TrendingUp,
   Loader2,
   CheckCircle2,
+  Clock,
+  Star,
+  Infinity,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder');
 
 interface Plan {
   id: string;
   name: string;
-  name_ur: string;
+  nameUrdu: string;
   price: number;
-  features: string[];
-  listingLimit: number;
+  currency: string;
+  period?: string;
+  maxListings: number;
+  listingDuration: number;
+  features: {
+    prioritySupport: boolean;
+    enhancedVisibility: boolean;
+    analytics: boolean;
+    featuredBadge: boolean;
+    topVisibility: boolean;
+  };
+  benefits: string[];
+  limitations: string[];
 }
 
 interface CurrentSubscription {
   plan: string;
-  expiresAt: string | null;
-  features: string[];
+  status: string;
+  startDate: string;
+  endDate: string | null;
+  maxListings: number;
+  listingDuration: number;
+  features: Plan['features'];
+  planDetails: Plan;
 }
 
-const Subscription: React.FC = () => {
-  const { t } = useLanguage();
-  const navigate = useNavigate();
-  const [isAnnual, setIsAnnual] = useState(false);
-  const [currency, setCurrency] = useState<'pkr' | 'usd'>('pkr');
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [subscribingPlan, setSubscribingPlan] = useState<string | null>(null);
+// Payment Form Component
+const PaymentForm: React.FC<{ 
+  plan: Plan; 
+  onSuccess: () => void; 
+  onCancel: () => void;
+}> = ({ plan, onSuccess, onCancel }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [loading, setLoading] = useState(false);
+  const [clientSecret, setClientSecret] = useState('');
 
   useEffect(() => {
-    fetchPlans();
-    fetchCurrentSubscription();
+    createPaymentIntent();
   }, []);
 
-  const fetchPlans = async () => {
+  const createPaymentIntent = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/v1/subscriptions/plans');
-      const data = await response.json();
-      if (data.success) {
-        setPlans(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching plans:', error);
-      toast.error('Failed to load subscription plans');
+      const response = await subscriptionApi.createPayment(plan.id);
+      setClientSecret(response.data.data.clientSecret);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to initialize payment');
     }
   };
 
-  const fetchCurrentSubscription = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/api/v1/subscriptions/current', {
-        credentials: 'include',
-      });
-      const data = await response.json();
-      if (data.success) {
-        setCurrentSubscription(data.data);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements || !clientSecret) return;
+
+    setLoading(true);
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) return;
+
+    const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+      payment_method: { card: cardElement }
+    });
+
+    if (error) {
+      toast.error(error.message || 'Payment failed');
+      setLoading(false);
+    } else if (paymentIntent?.status === 'succeeded') {
+      // Confirm payment and activate subscription
+      try {
+        await paymentApi.confirm({ paymentIntentId: paymentIntent.id });
+        await subscriptionApi.subscribe({ planId: plan.id, paymentIntentId: paymentIntent.id });
+        toast.success(`Successfully subscribed to ${plan.name} plan!`);
+        onSuccess();
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || 'Failed to activate subscription');
       }
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="p-4 bg-muted rounded-lg">
+        <div className="flex justify-between items-center mb-4">
+          <span className="font-medium">{plan.name} Plan</span>
+          <span className="text-xl font-bold">PKR {plan.price.toLocaleString()}/month</span>
+        </div>
+      </div>
+      
+      <div className="p-4 border rounded-lg">
+        <CardElement options={{
+          style: {
+            base: { fontSize: '16px', color: '#424770', '::placeholder': { color: '#aab7c4' } },
+            invalid: { color: '#9e2146' }
+          }
+        }} />
+      </div>
+      
+      <p className="text-xs text-center text-muted-foreground">
+        Test card: 4242 4242 4242 4242 | Any future date | Any CVC
+      </p>
+      
+      <div className="flex gap-3">
+        <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!stripe || loading} className="flex-1">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+          Pay PKR {plan.price.toLocaleString()}
+        </Button>
+      </div>
+    </form>
+  );
+};
+
+const Subscription: React.FC = () => {
+  const { t } = useLanguage();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const [plansRes, currentRes] = await Promise.all([
+        subscriptionApi.getPlans(),
+        subscriptionApi.getCurrentPlan()
+      ]);
+      setPlans(plansRes.data.data || []);
+      setCurrentSubscription(currentRes.data.data || null);
     } catch (error) {
-      console.error('Error fetching subscription:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSubscribe = async (planId: string) => {
-    if (planId === 'free' || planId === currentSubscription?.plan) return;
-    
-    setSubscribingPlan(planId);
-    
-    try {
-      const response = await fetch('http://localhost:5000/api/v1/subscriptions/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ planId }),
-      });
+  const handleSubscribe = (plan: Plan) => {
+    if (plan.id === 'free' || plan.id === currentSubscription?.plan) return;
+    setSelectedPlan(plan);
+    setShowPaymentDialog(true);
+  };
 
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success('Subscription activated successfully!');
-        setCurrentSubscription({
-          plan: planId,
-          expiresAt: data.data.expiresAt,
-          features: plans.find(p => p.id === planId)?.features || [],
-        });
-      } else {
-        throw new Error(data.message || 'Failed to subscribe');
-      }
-    } catch (error: any) {
-      console.error('Subscription error:', error);
-      toast.error(error.message || 'Failed to subscribe. Please try again.');
-    } finally {
-      setSubscribingPlan(null);
-    }
+  const handlePaymentSuccess = () => {
+    setShowPaymentDialog(false);
+    setSelectedPlan(null);
+    fetchData();
   };
 
   const handleCancel = async () => {
     if (!currentSubscription || currentSubscription.plan === 'free') return;
 
     try {
-      const response = await fetch('http://localhost:5000/api/v1/subscriptions/cancel', {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success('Subscription cancelled');
-        setCurrentSubscription({
-          plan: 'free',
-          expiresAt: null,
-          features: plans.find(p => p.id === 'free')?.features || [],
-        });
-      } else {
-        throw new Error(data.message || 'Failed to cancel subscription');
-      }
+      await subscriptionApi.cancel();
+      toast.success('Subscription cancelled. You will retain access until the end of your billing period.');
+      fetchData();
     } catch (error: any) {
-      console.error('Cancel error:', error);
-      toast.error(error.message || 'Failed to cancel subscription');
+      toast.error(error.response?.data?.message || 'Failed to cancel subscription');
     }
   };
 
-  // Convert backend plans to display format
-  const displayPlans = plans.map(plan => {
-    const isCurrentPlan = currentSubscription?.plan === plan.id;
-    const monthlyPrice = plan.price;
-    const annualPrice = Math.round(plan.price * 10);
-    
-    return {
-      id: plan.id,
-      name: plan.name,
-      price: { 
-        pkr: isAnnual ? annualPrice : monthlyPrice, 
-        usd: isAnnual ? Math.round(annualPrice / 280) : Math.round(monthlyPrice / 280) 
-      },
-      description: plan.id === 'free' ? 'Basic access with limitations' : 
-                   plan.id === 'basic' ? 'Great for casual renters' : 
-                   'Full access with premium benefits',
-      features: plan.features.map(f => ({ text: f, included: true })),
-      limitations: plan.id === 'free' ? [
-        'Limited to 5 listings',
-        'Standard visibility only',
-        'Basic support'
-      ] : [],
-      popular: plan.id === 'premium',
-      isCurrentPlan,
-      cta: isCurrentPlan ? 'Current Plan' : plan.id === 'free' ? 'Downgrade' : t.subscription.subscribe,
-    };
-  });
+  const getPlanIcon = (planId: string) => {
+    switch (planId) {
+      case 'premium': return <Crown className="w-6 h-6" />;
+      case 'basic': return <Star className="w-6 h-6" />;
+      default: return <Shield className="w-6 h-6" />;
+    }
+  };
 
+  const getListingDurationText = (hours: number) => {
+    if (hours === -1) return 'Never expires';
+    if (hours === 48) return '48 hours';
+    if (hours === 720) return '30 days';
+    return `${hours} hours`;
+  };
 
   return (
     <Layout>
@@ -181,38 +235,53 @@ const Subscription: React.FC = () => {
             </Link>
             <h1 className="text-4xl font-bold text-foreground mb-4">{t.subscription.title}</h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Choose the plan that's right for you. Upgrade to Premium to unlock all features and maximize your rental success.
+              Choose the plan that's right for you. Upgrade to unlock more listings and premium features.
             </p>
           </div>
 
-          {/* Toggles */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-12">
-            <div className="flex items-center gap-3">
-              <span className={`text-sm ${!isAnnual ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>Monthly</span>
-              <Switch checked={isAnnual} onCheckedChange={setIsAnnual} />
-              <span className={`text-sm ${isAnnual ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                Annual <Badge variant="secondary" className="ml-1">Save 17%</Badge>
-              </span>
-            </div>
-            <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
-              <button
-                onClick={() => setCurrency('pkr')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                  currency === 'pkr' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                🇵🇰 PKR
-              </button>
-              <button
-                onClick={() => setCurrency('usd')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                  currency === 'usd' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'
-                }`}
-              >
-                🌍 USD
-              </button>
-            </div>
-          </div>
+          {/* Current Plan Info */}
+          {currentSubscription && (
+            <Card className="mb-8 border-primary/20 bg-primary/5">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      {getPlanIcon(currentSubscription.plan)}
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Current Plan</p>
+                      <p className="text-xl font-bold text-foreground capitalize">{currentSubscription.plan}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Listings</p>
+                      <p className="font-medium">
+                        {currentSubscription.maxListings === -1 ? (
+                          <span className="flex items-center gap-1"><Infinity className="w-4 h-4" /> Unlimited</span>
+                        ) : (
+                          `${currentSubscription.maxListings} max`
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Listing Duration</p>
+                      <p className="font-medium flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {getListingDurationText(currentSubscription.listingDuration)}
+                      </p>
+                    </div>
+                    {currentSubscription.endDate && (
+                      <div>
+                        <p className="text-muted-foreground">Renews</p>
+                        <p className="font-medium">{new Date(currentSubscription.endDate).toLocaleDateString()}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Plans */}
           {isLoading ? (
@@ -220,113 +289,142 @@ const Subscription: React.FC = () => {
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-              {displayPlans.map((plan) => (
-                <Card
-                  key={plan.id}
-                  className={`relative overflow-hidden transition-all ${
-                    plan.popular ? 'border-primary shadow-xl scale-105' : ''
-                  } ${plan.isCurrentPlan ? 'ring-2 ring-green-500' : ''}`}
-                >
-                  {plan.popular && (
-                    <div className="absolute top-0 right-0">
-                      <Badge className="rounded-none rounded-bl-lg bg-gradient-to-r from-amber-400 to-orange-400 text-white">
-                        <Crown className="w-3 h-3 mr-1" /> Most Popular
-                      </Badge>
-                    </div>
-                  )}
-                  {plan.isCurrentPlan && (
-                    <div className="absolute top-0 left-0">
-                      <Badge className="rounded-none rounded-br-lg bg-green-500 text-white">
-                        <CheckCircle2 className="w-3 h-3 mr-1" /> Active
-                      </Badge>
-                    </div>
-                  )}
-                  <CardHeader className="text-center pb-4">
-                    <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                    <CardDescription>{plan.description}</CardDescription>
-                    <div className="mt-4">
-                      <span className="text-4xl font-bold text-foreground">
-                        {currency === 'pkr' ? 'PKR ' : '$'}
-                        {plan.price[currency].toLocaleString()}
-                      </span>
-                      {plan.price[currency] > 0 && (
-                        <span className="text-muted-foreground">/{isAnnual ? 'year' : 'month'}</span>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <ul className="space-y-3">
-                      {plan.features.map((feature, idx) => (
-                        <li key={idx} className="flex items-center gap-3">
-                          <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                          <span className="text-foreground">{feature.text}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    {plan.limitations.length > 0 && (
-                      <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
-                        <h4 className="font-medium text-red-600 mb-2 flex items-center gap-2">
-                          <Ban className="w-4 h-4" />
-                          Limitations
-                        </h4>
-                        <ul className="space-y-1">
-                          {plan.limitations.map((limitation, idx) => (
-                            <li key={idx} className="text-sm text-red-600/80 flex items-center gap-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                              {limitation}
-                            </li>
-                          ))}
-                        </ul>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {plans.map((plan) => {
+                const isCurrentPlan = currentSubscription?.plan === plan.id;
+                const isPremium = plan.id === 'premium';
+                
+                return (
+                  <Card
+                    key={plan.id}
+                    className={`relative overflow-hidden transition-all ${
+                      isPremium ? 'border-primary shadow-xl scale-105' : ''
+                    } ${isCurrentPlan ? 'ring-2 ring-green-500' : ''}`}
+                  >
+                    {isPremium && (
+                      <div className="absolute top-0 right-0">
+                        <Badge className="rounded-none rounded-bl-lg bg-gradient-to-r from-amber-400 to-orange-400 text-white">
+                          <Crown className="w-3 h-3 mr-1" /> Best Value
+                        </Badge>
                       </div>
                     )}
-
-                    <Button
-                      onClick={() => handleSubscribe(plan.id)}
-                      className="w-full"
-                      size="lg"
-                      variant={plan.popular ? 'default' : 'outline'}
-                      disabled={plan.isCurrentPlan || subscribingPlan === plan.id}
-                    >
-                      {subscribingPlan === plan.id ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          {plan.id === 'premium' && !plan.isCurrentPlan && <Zap className="w-4 h-4 mr-2" />}
-                          {plan.cta}
-                        </>
-                      )}
-                    </Button>
-
-                    {plan.isCurrentPlan && plan.id !== 'free' && (
-                      <Button
-                        onClick={handleCancel}
-                        variant="ghost"
-                        className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"
-                      >
-                        Cancel Subscription
-                      </Button>
+                    {isCurrentPlan && (
+                      <div className="absolute top-0 left-0">
+                        <Badge className="rounded-none rounded-br-lg bg-green-500 text-white">
+                          <CheckCircle2 className="w-3 h-3 mr-1" /> Active
+                        </Badge>
+                      </div>
                     )}
-                  </CardContent>
-                </Card>
-              ))}
+                    
+                    <CardHeader className="text-center pb-4 pt-8">
+                      <div className="w-14 h-14 rounded-full bg-primary/10 mx-auto mb-4 flex items-center justify-center">
+                        {getPlanIcon(plan.id)}
+                      </div>
+                      <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                      <CardDescription>
+                        {plan.id === 'free' ? 'Basic access with limitations' : 
+                         plan.id === 'basic' ? 'Great for casual renters' : 
+                         'Full access with premium benefits'}
+                      </CardDescription>
+                      <div className="mt-4">
+                        <span className="text-4xl font-bold text-foreground">
+                          PKR {plan.price.toLocaleString()}
+                        </span>
+                        {plan.price > 0 && (
+                          <span className="text-muted-foreground">/month</span>
+                        )}
+                      </div>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-6">
+                      {/* Key Stats */}
+                      <div className="grid grid-cols-2 gap-3 p-3 bg-muted/50 rounded-lg">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-foreground">
+                            {plan.maxListings === -1 ? '∞' : plan.maxListings}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Listings</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-foreground">
+                            {plan.listingDuration === -1 ? '∞' : plan.listingDuration === 48 ? '48h' : '30d'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Duration</p>
+                        </div>
+                      </div>
+
+                      {/* Benefits */}
+                      <ul className="space-y-3">
+                        {plan.benefits.map((benefit, idx) => (
+                          <li key={idx} className="flex items-center gap-3">
+                            <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
+                            <span className="text-sm text-foreground">{benefit}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {/* Limitations */}
+                      {plan.limitations.length > 0 && (
+                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                          <h4 className="font-medium text-red-600 mb-2 flex items-center gap-2 text-sm">
+                            <Ban className="w-4 h-4" />
+                            Limitations
+                          </h4>
+                          <ul className="space-y-1">
+                            {plan.limitations.map((limitation, idx) => (
+                              <li key={idx} className="text-xs text-red-600/80 flex items-center gap-2">
+                                <span className="w-1 h-1 rounded-full bg-red-400" />
+                                {limitation}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <Button
+                        onClick={() => handleSubscribe(plan)}
+                        className="w-full"
+                        size="lg"
+                        variant={isPremium ? 'default' : 'outline'}
+                        disabled={isCurrentPlan || plan.id === 'free'}
+                      >
+                        {isCurrentPlan ? (
+                          'Current Plan'
+                        ) : plan.id === 'free' ? (
+                          'Free Plan'
+                        ) : (
+                          <>
+                            <Zap className="w-4 h-4 mr-2" />
+                            Upgrade Now
+                          </>
+                        )}
+                      </Button>
+
+                      {isCurrentPlan && plan.id !== 'free' && (
+                        <Button
+                          onClick={handleCancel}
+                          variant="ghost"
+                          className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"
+                        >
+                          Cancel Subscription
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
 
-
           {/* Benefits Section */}
           <div className="mt-20">
-            <h2 className="text-2xl font-bold text-foreground text-center mb-8">Premium Benefits</h2>
+            <h2 className="text-2xl font-bold text-foreground text-center mb-8">Why Upgrade?</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               {[
-                { icon: Shield, title: 'Verified Badge', desc: 'Build trust with a verified customer badge' },
-                { icon: Eye, title: 'More Visibility', desc: 'Your listings appear higher in search' },
-                { icon: Ban, title: 'No Ads', desc: 'Enjoy an ad-free browsing experience' },
+                { icon: Eye, title: 'More Visibility', desc: 'Your listings appear higher in search results' },
+                { icon: Clock, title: 'Longer Duration', desc: 'Keep your listings active for longer' },
                 { icon: TrendingUp, title: 'Analytics', desc: 'Track views and performance metrics' },
+                { icon: Shield, title: 'Priority Support', desc: 'Get help faster when you need it' },
               ].map((benefit) => (
                 <Card key={benefit.title} className="text-center p-6">
                   <div className="w-12 h-12 rounded-full bg-primary/10 mx-auto mb-4 flex items-center justify-center">
@@ -338,27 +436,29 @@ const Subscription: React.FC = () => {
               ))}
             </div>
           </div>
-
-          {/* FAQ */}
-          <div className="mt-20 max-w-2xl mx-auto">
-            <h2 className="text-2xl font-bold text-foreground text-center mb-8">Frequently Asked Questions</h2>
-            <div className="space-y-4">
-              {[
-                { q: 'Can I cancel anytime?', a: 'Yes, you can cancel your subscription at any time. Your premium benefits will remain active until the end of your billing period.' },
-                { q: 'What payment methods are accepted?', a: 'We accept JazzCash, Easypaisa, and all major credit/debit cards (Visa, Mastercard).' },
-                { q: 'Is there a refund policy?', a: "We offer a 7-day money-back guarantee if you're not satisfied with Premium." },
-              ].map((faq, idx) => (
-                <Card key={idx}>
-                  <CardContent className="p-4">
-                    <h4 className="font-medium text-foreground">{faq.q}</h4>
-                    <p className="text-sm text-muted-foreground mt-1">{faq.a}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
+
+      {/* Payment Dialog */}
+      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Subscribe to {selectedPlan?.name}</DialogTitle>
+            <DialogDescription>
+              Enter your payment details to activate your subscription
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPlan && (
+            <Elements stripe={stripePromise}>
+              <PaymentForm 
+                plan={selectedPlan} 
+                onSuccess={handlePaymentSuccess}
+                onCancel={() => setShowPaymentDialog(false)}
+              />
+            </Elements>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };

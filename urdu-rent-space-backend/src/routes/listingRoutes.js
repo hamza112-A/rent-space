@@ -97,6 +97,27 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
 
 // @route   POST /api/v1/listings
 router.post('/', protect, upload.array('images', 10), asyncHandler(async (req, res) => {
+  const User = require('../models/User');
+  
+  // Get user's subscription info
+  const user = await User.findById(req.user._id);
+  const subscription = user.subscription;
+  
+  // Check listing limits
+  const activeListings = await Listing.countDocuments({ 
+    owner: req.user._id, 
+    status: { $in: ['active', 'pending'] }
+  });
+  
+  const maxListings = subscription.maxListings || 5;
+  if (maxListings !== -1 && activeListings >= maxListings) {
+    return res.status(403).json({ 
+      success: false, 
+      message: `You have reached your listing limit (${maxListings}). Please upgrade your plan to create more listings.`,
+      upgradeRequired: true
+    });
+  }
+
   // Parse JSON fields that were stringified in FormData
   const jsonFields = ['location', 'pricing', 'availability', 'policies', 'specifications'];
   jsonFields.forEach(field => {
@@ -110,6 +131,17 @@ router.post('/', protect, upload.array('images', 10), asyncHandler(async (req, r
   });
 
   req.body.owner = req.user._id;
+  req.body.ownerPlan = subscription.plan || 'free';
+  
+  // Set expiration based on subscription plan
+  const listingDuration = subscription.listingDuration || 48; // hours
+  if (listingDuration !== -1) {
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + listingDuration);
+    req.body.expiresAt = expiresAt;
+  } else {
+    req.body.expiresAt = null; // Never expires for premium
+  }
   
   // Handle uploaded files - upload to Cloudinary
   if (req.files?.length) {

@@ -235,9 +235,13 @@ export const paymentApi = {
 export const subscriptionApi = {
   getPlans: () => api.get('/subscriptions/plans'),
   getCurrentPlan: () => api.get('/subscriptions/current'),
-  subscribe: (data: { planId: string; paymentMethod: string }) =>
+  subscribe: (data: { planId: string; paymentIntentId?: string }) =>
     api.post('/subscriptions/subscribe', data),
   cancel: () => api.post('/subscriptions/cancel'),
+  createPayment: (planId: string) =>
+    api.post('/subscriptions/create-payment', { planId }),
+  checkLimits: () => api.get('/subscriptions/check-limits'),
+  sync: () => api.post('/subscriptions/sync'),
 };
 
 // Messages API

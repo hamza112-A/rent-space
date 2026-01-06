@@ -144,7 +144,7 @@ const userSchema = new mongoose.Schema({
   subscription: {
     plan: {
       type: String,
-      enum: ['free', 'premium'],
+      enum: ['free', 'basic', 'premium'],
       default: 'free'
     },
     status: {
@@ -152,10 +152,20 @@ const userSchema = new mongoose.Schema({
       enum: ['active', 'cancelled', 'expired'],
       default: 'active'
     },
-    startDate: Date,
+    startDate: { type: Date, default: Date.now },
     endDate: Date,
     autoRenew: { type: Boolean, default: false },
-    paymentMethod: String
+    paymentMethod: String,
+    // Plan limits
+    maxListings: { type: Number, default: 5 },
+    listingDuration: { type: Number, default: 48 }, // hours for free, 720 (30 days) for basic, unlimited for premium
+    features: {
+      prioritySupport: { type: Boolean, default: false },
+      enhancedVisibility: { type: Boolean, default: false },
+      analytics: { type: Boolean, default: false },
+      featuredBadge: { type: Boolean, default: false },
+      topVisibility: { type: Boolean, default: false }
+    }
   },
 
   // Payment Methods

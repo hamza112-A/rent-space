@@ -176,6 +176,14 @@ const listingSchema = new mongoose.Schema({
   rejectionReason: String,
   suspensionReason: String,
 
+  // Subscription-based expiration
+  expiresAt: Date, // When the listing will auto-deactivate
+  ownerPlan: {
+    type: String,
+    enum: ['free', 'basic', 'premium'],
+    default: 'free'
+  },
+
   // Statistics
   stats: {
     views: { type: Number, default: 0 },
