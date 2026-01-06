@@ -392,15 +392,15 @@ const AdminDisputes: React.FC = () => {
                   <div className="grid grid-cols-3 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Complainant:</span>
-                      <p className="font-medium">{dispute.complainant.fullName}</p>
+                      <p className="font-medium">{dispute.complainant?.fullName || 'Unknown'}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Respondent:</span>
-                      <p className="font-medium">{dispute.respondent.fullName}</p>
+                      <p className="font-medium">{dispute.respondent?.fullName || 'Unknown'}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Category:</span>
-                      <p className="font-medium">{dispute.category.replace(/_/g, ' ')}</p>
+                      <p className="font-medium">{dispute.category?.replace(/_/g, ' ') || 'N/A'}</p>
                     </div>
                   </div>
 
@@ -408,7 +408,7 @@ const AdminDisputes: React.FC = () => {
                     <div className="flex items-center gap-2 text-sm">
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Assigned to:</span>
-                      <span className="font-medium">{dispute.assignedTo.fullName}</span>
+                      <span className="font-medium">{dispute.assignedTo?.fullName || 'Unknown'}</span>
                     </div>
                   )}
 
@@ -456,14 +456,14 @@ const AdminDisputes: React.FC = () => {
                       <CardContent>
                         <div className="flex items-center gap-3">
                           <Avatar>
-                            <AvatarImage src={selectedDispute.complainant.avatar?.url} />
+                            <AvatarImage src={selectedDispute.complainant?.avatar?.url} />
                             <AvatarFallback>
-                              {selectedDispute.complainant.fullName[0]}
+                              {selectedDispute.complainant?.fullName?.[0] || '?'}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{selectedDispute.complainant.fullName}</p>
-                            <p className="text-sm text-muted-foreground">{selectedDispute.complainant.email}</p>
+                            <p className="font-medium">{selectedDispute.complainant?.fullName || 'Unknown'}</p>
+                            <p className="text-sm text-muted-foreground">{selectedDispute.complainant?.email || 'N/A'}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -475,14 +475,14 @@ const AdminDisputes: React.FC = () => {
                       <CardContent>
                         <div className="flex items-center gap-3">
                           <Avatar>
-                            <AvatarImage src={selectedDispute.respondent.avatar?.url} />
+                            <AvatarImage src={selectedDispute.respondent?.avatar?.url} />
                             <AvatarFallback>
-                              {selectedDispute.respondent.fullName[0]}
+                              {selectedDispute.respondent?.fullName?.[0] || '?'}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{selectedDispute.respondent.fullName}</p>
-                            <p className="text-sm text-muted-foreground">{selectedDispute.respondent.email}</p>
+                            <p className="font-medium">{selectedDispute.respondent?.fullName || 'Unknown'}</p>
+                            <p className="text-sm text-muted-foreground">{selectedDispute.respondent?.email || 'N/A'}</p>
                           </div>
                         </div>
                       </CardContent>
@@ -519,15 +519,15 @@ const AdminDisputes: React.FC = () => {
                     <CardContent>
                       <ScrollArea className="h-64 mb-4">
                         <div className="space-y-4">
-                          {selectedDispute.messages.map((msg, idx) => (
+                          {selectedDispute.messages?.map((msg, idx) => (
                             <div key={idx} className="flex gap-3">
                               <Avatar className="h-8 w-8">
-                                <AvatarImage src={msg.sender.avatar?.url} />
-                                <AvatarFallback>{msg.sender.fullName[0]}</AvatarFallback>
+                                <AvatarImage src={msg.sender?.avatar?.url} />
+                                <AvatarFallback>{msg.sender?.fullName?.[0] || '?'}</AvatarFallback>
                               </Avatar>
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-medium text-sm">{msg.sender.fullName}</span>
+                                  <span className="font-medium text-sm">{msg.sender?.fullName || 'Unknown'}</span>
                                   <Badge variant="outline" className="text-xs">
                                     {msg.senderRole}
                                   </Badge>

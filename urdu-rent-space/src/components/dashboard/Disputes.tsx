@@ -453,7 +453,7 @@ const Disputes: React.FC = () => {
       ) : (
         <div className="grid gap-4">
           {filteredDisputes.map((dispute) => {
-            const isComplainant = dispute.complainant._id === user?._id;
+            const isComplainant = dispute.complainant?._id === user?._id;
             const otherParty = isComplainant ? dispute.respondent : dispute.complainant;
 
             return (
@@ -485,10 +485,20 @@ const Disputes: React.FC = () => {
                       </div>
                       <div>
                         <span className="text-muted-foreground">
-                          {isComplainant ? 'Respondent:' : 'Filed by:'}
+                          {user?.isSuperAdmin ? 'Complainant:' : (isComplainant ? 'Respondent:' : 'Filed by:')}
                         </span>
-                        <p className="font-medium">{otherParty.fullName}</p>
+                        <p className="font-medium">
+                          {user?.isSuperAdmin 
+                            ? dispute.complainant?.fullName || 'Unknown'
+                            : otherParty?.fullName || 'Unknown'}
+                        </p>
                       </div>
+                      {user?.isSuperAdmin && (
+                        <div>
+                          <span className="text-muted-foreground">Respondent:</span>
+                          <p className="font-medium">{dispute.respondent?.fullName || 'Unknown'}</p>
+                        </div>
+                      )}
                       {dispute.booking && (
                         <div>
                           <span className="text-muted-foreground">Booking:</span>
