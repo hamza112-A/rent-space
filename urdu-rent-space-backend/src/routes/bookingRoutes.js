@@ -77,7 +77,62 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
   const start = new Date(startDate);
   const end = new Date(endDate);
   const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) || 1;
-  const dailyRate = listing.pricing?.daily || 0;
+
+  // Check for blocked dates
+  if (listing.availability?.blockedDates && listing.availability.blockedDates.length > 0) {
+    const blockedDates = listing.availability.blockedDates.map(d => new Date(d).toDateString());
+    
+    // Generate all dates in the booking range
+    const bookingDates = [];
+    const currentDate = new Date(start);
+    while (currentDate <= end) {
+      bookingDates.push(new Date(currentDate).toDateString());
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Check if any booking date is blocked
+    const conflictingDates = bookingDates.filter(date => blockedDates.includes(date));
+    if (conflictingDates.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Some of the selected dates are not available for booking',
+        blockedDates: conflictingDates
+      });
+    }
+  }
+
+  // Check for existing approved/pending bookings that conflict
+  const existingBookings = await Booking.find({
+    listing: listingId,
+    status: { $in: ['approved', 'pending', 'in_progress'] },
+    $or: [
+      { startDate: { $lte: end }, endDate: { $gte: start } }
+    ]
+  });
+
+  if (existingBookings.length > 0) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'This listing is already booked for some of the selected dates'
+    });
+  }
+  
+  // Get the best available daily rate
+  let dailyRate = listing.pricing?.daily || 0;
+  let priceType = 'daily';
+  
+  // If no daily rate, calculate from weekly or monthly
+  if (dailyRate === 0 && listing.pricing?.weekly) {
+    dailyRate = Math.round(listing.pricing.weekly / 7);
+    priceType = 'weekly';
+  } else if (dailyRate === 0 && listing.pricing?.monthly) {
+    dailyRate = Math.round(listing.pricing.monthly / 30);
+    priceType = 'monthly';
+  } else if (dailyRate === 0 && listing.pricing?.hourly) {
+    dailyRate = listing.pricing.hourly * 24;
+    priceType = 'hourly';
+  }
+  
   const subtotal = dailyRate * days;
   const serviceFee = Math.round(subtotal * 0.05); // 5% service fee
   const totalAmount = subtotal + serviceFee;
@@ -93,7 +148,7 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
       unit: 'days'
     },
     pricing: {
-      priceType: 'daily',
+      priceType,
       unitPrice: dailyRate,
       subtotal,
       serviceFee,

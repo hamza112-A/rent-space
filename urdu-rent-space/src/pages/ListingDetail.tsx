@@ -116,7 +116,20 @@ const ListingDetail: React.FC = () => {
   };
 
   const handleConfirmBooking = async () => {
-    if (!selectedDates || selectedDates.length === 0 || !listingId) return;
+    if (!selectedDates || selectedDates.length === 0 || !listingId || !listing) return;
+    
+    // Check if any selected date is blocked
+    const blockedDatesArray = listing.availability?.blockedDates?.map((d: string) => new Date(d)) || [];
+    const isBlocked = (date: Date) => {
+      const dateStr = date.toDateString();
+      return blockedDatesArray.some((blocked: Date) => blocked.toDateString() === dateStr);
+    };
+    
+    const blockedSelected = selectedDates.filter(date => isBlocked(date));
+    if (blockedSelected.length > 0) {
+      toast.error('Some selected dates are not available. Please remove blocked dates.');
+      return;
+    }
     
     setBookingLoading(true);
     try {
@@ -133,8 +146,15 @@ const ListingDetail: React.FC = () => {
 
       setBookingDialogOpen(false);
       
-      // Calculate total amount and redirect to payment
-      const pricePerDay = listing?.pricing?.daily || 0;
+      // Calculate total amount using the best available price
+      const pricing = listing?.pricing || {};
+      let pricePerDay = pricing.daily || 0;
+      if (pricePerDay === 0 && pricing.weekly) {
+        pricePerDay = Math.round(pricing.weekly / 7);
+      } else if (pricePerDay === 0 && pricing.monthly) {
+        pricePerDay = Math.round(pricing.monthly / 30);
+      }
+      
       const totalAmount = Math.round(pricePerDay * selectedDates.length * 1.05);
       const bookingId = response.data?.data?._id;
       
@@ -235,7 +255,38 @@ const ListingDetail: React.FC = () => {
 
   // Extract data from listing
   const images = listing.images?.map((img: any) => img.url) || [];
-  const dailyPrice = listing.pricing?.daily || 0;
+  
+  // Get blocked dates from listing
+  const blockedDates = listing.availability?.blockedDates?.map((d: string) => new Date(d)) || [];
+  
+  // Function to check if a date is blocked
+  const isDateBlocked = (date: Date) => {
+    const dateStr = date.toDateString();
+    return blockedDates.some((blocked: Date) => blocked.toDateString() === dateStr);
+  };
+  
+  // Get the best available price (prefer daily, then calculate from weekly/monthly, then hourly)
+  const getDisplayPrice = () => {
+    const pricing = listing.pricing || {};
+    if (pricing.daily && pricing.daily > 0) {
+      return { price: pricing.daily, type: 'day', label: t.listing.perDay };
+    }
+    if (pricing.weekly && pricing.weekly > 0) {
+      return { price: Math.round(pricing.weekly / 7), type: 'day', label: `${t.listing.perDay} (from weekly)`, weeklyPrice: pricing.weekly };
+    }
+    if (pricing.monthly && pricing.monthly > 0) {
+      return { price: Math.round(pricing.monthly / 30), type: 'day', label: `${t.listing.perDay} (from monthly)`, monthlyPrice: pricing.monthly };
+    }
+    if (pricing.hourly && pricing.hourly > 0) {
+      return { price: pricing.hourly, type: 'hour', label: t.listing.perHour };
+    }
+    return { price: 0, type: 'day', label: t.listing.perDay };
+  };
+  
+  const priceInfo = getDisplayPrice();
+  const dailyPrice = priceInfo.price;
+  const priceType = priceInfo.type;
+  
   const locationStr = `${listing.location?.area || ''}, ${listing.location?.city || ''}`.replace(/^, |, $/g, '');
   const features = listing.features || [];
   const specifications = listing.specifications || {};
@@ -525,8 +576,24 @@ const ListingDetail: React.FC = () => {
                       selected={selectedDates}
                       onSelect={setSelectedDates}
                       className="rounded-md border"
-                      disabled={(date) => date < new Date()}
+                      disabled={(date) => date < new Date() || isDateBlocked(date)}
+                      modifiers={{
+                        blocked: blockedDates
+                      }}
+                      modifiersStyles={{
+                        blocked: { 
+                          textDecoration: 'line-through',
+                          color: 'var(--destructive)',
+                          opacity: 0.5
+                        }
+                      }}
                     />
+                    {blockedDates.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                        <span className="w-3 h-3 bg-destructive/20 rounded"></span>
+                        Dates with strikethrough are not available
+                      </p>
+                    )}
                   </div>
 
                   <Separator />

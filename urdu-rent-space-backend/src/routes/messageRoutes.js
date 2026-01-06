@@ -6,11 +6,14 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Listing = require('../models/Listing');
+const mongoose = require('mongoose');
 
-// @route   GET /api/v1/messages (get all conversations)
+// @route   GET /api/v1/messages (get all conversations for current user only)
 router.get('/', protect, asyncHandler(async (req, res) => {
+  const userId = new mongoose.Types.ObjectId(req.user._id);
+  
   const conversations = await Conversation.find({
-    participants: req.user._id
+    participants: userId
   })
     .populate('participants', 'fullName profileImage')
     .populate('listing', 'title images')
@@ -29,15 +32,20 @@ router.get('/', protect, asyncHandler(async (req, res) => {
 
 // @route   GET /api/v1/messages/:id/messages
 router.get('/:id/messages', protect, asyncHandler(async (req, res) => {
+  const userId = new mongoose.Types.ObjectId(req.user._id);
   const conversation = await Conversation.findById(req.params.id);
   
   if (!conversation) {
     return res.status(404).json({ success: false, message: 'Conversation not found' });
   }
 
-  // Check if user is participant
-  if (!conversation.participants.includes(req.user._id)) {
-    return res.status(403).json({ success: false, message: 'Not authorized' });
+  // Check if user is participant - compare ObjectIds properly
+  const isParticipant = conversation.participants.some(
+    p => p.toString() === userId.toString()
+  );
+  
+  if (!isParticipant) {
+    return res.status(403).json({ success: false, message: 'Not authorized to view this conversation' });
   }
 
   const messages = await Message.find({ conversation: req.params.id })
@@ -48,7 +56,7 @@ router.get('/:id/messages', protect, asyncHandler(async (req, res) => {
   await Message.updateMany(
     { 
       conversation: req.params.id, 
-      sender: { $ne: req.user._id },
+      sender: { $ne: userId },
       read: false 
     },
     { read: true, readAt: new Date() }
@@ -165,17 +173,27 @@ router.post('/:id/messages', protect, asyncHandler(async (req, res) => {
 
 // @route   POST /api/v1/messages/:id/read
 router.post('/:id/read', protect, asyncHandler(async (req, res) => {
+  const userId = new mongoose.Types.ObjectId(req.user._id);
   const conversation = await Conversation.findById(req.params.id);
   
   if (!conversation) {
     return res.status(404).json({ success: false, message: 'Conversation not found' });
   }
 
+  // Check if user is participant
+  const isParticipant = conversation.participants.some(
+    p => p.toString() === userId.toString()
+  );
+  
+  if (!isParticipant) {
+    return res.status(403).json({ success: false, message: 'Not authorized' });
+  }
+
   // Mark all messages as read
   await Message.updateMany(
     { 
       conversation: req.params.id, 
-      sender: { $ne: req.user._id },
+      sender: { $ne: userId },
       read: false 
     },
     { read: true, readAt: new Date() }
