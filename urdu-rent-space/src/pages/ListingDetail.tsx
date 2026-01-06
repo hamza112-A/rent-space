@@ -152,10 +152,10 @@ const ListingDetail: React.FC = () => {
     }
     
     try {
-      await messageApi.sendMessage({
-        recipientId: listing?.owner?._id,
-        content: message,
+      await messageApi.createConversation({
+        participantId: listing?.owner?._id,
         listingId,
+        content: message,
       });
       setContactDialogOpen(false);
       toast.success('Message sent to owner!');

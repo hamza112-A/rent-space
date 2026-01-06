@@ -20,7 +20,8 @@ import {
   CheckCircle,
   CalendarDays,
   TrendingUp,
-  Tag
+  Tag,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -30,6 +31,7 @@ import Earnings from '@/components/dashboard/Earnings';
 import Verification from '@/components/dashboard/Verification';
 import AccountSettings from '@/components/dashboard/AccountSettings';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
+import Messages from '@/components/dashboard/Messages';
 // Admin components
 import AdminDashboard from '@/components/dashboard/admin/AdminDashboard';
 import AdminUsers from '@/components/dashboard/admin/AdminUsers';
@@ -49,6 +51,7 @@ const Dashboard: React.FC = () => {
     { id: 'overview', label: t.dashboard.overview, icon: LayoutDashboard },
     { id: 'listings', label: t.dashboard.myListings, icon: Package },
     { id: 'bookings', label: t.dashboard.myBookings, icon: Calendar },
+    { id: 'messages', label: t.dashboard.messages, icon: MessageSquare },
     { id: 'earnings', label: t.dashboard.earnings, icon: DollarSign },
     { id: 'verification', label: t.dashboard.verification, icon: Shield },
     { id: 'settings', label: t.dashboard.settings, icon: Settings },
@@ -175,6 +178,7 @@ const Dashboard: React.FC = () => {
               {activeTab === 'overview' && <DashboardOverview />}
               {activeTab === 'listings' && <MyListings />}
               {activeTab === 'bookings' && <MyBookings />}
+              {activeTab === 'messages' && <Messages />}
               {activeTab === 'earnings' && <Earnings />}
               {activeTab === 'verification' && <Verification />}
               {activeTab === 'settings' && <AccountSettings />}

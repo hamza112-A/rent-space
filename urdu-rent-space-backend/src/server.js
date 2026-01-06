@@ -143,6 +143,7 @@ app.use(`${API_PREFIX}/listings`, listingRoutes);
 app.use(`${API_PREFIX}/bookings`, bookingRoutes);
 app.use(`${API_PREFIX}/payments`, paymentRoutes);
 app.use(`${API_PREFIX}/conversations`, messageRoutes);
+app.use(`${API_PREFIX}/messages`, messageRoutes); // Alias for messages
 app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes);
 app.use(`${API_PREFIX}/earnings`, earningsRoutes);

@@ -235,16 +235,18 @@ export const subscriptionApi = {
   cancel: () => api.post('/subscriptions/cancel'),
 };
 
-// Messages API (for future use)
+// Messages API
 export const messageApi = {
   getConversations: (params?: { page?: number; limit?: number }) =>
-    api.get('/messages/conversations', { params }),
+    api.get('/messages', { params }),
   getMessages: (conversationId: string, params?: { page?: number; limit?: number }) =>
-    api.get(`/messages/conversations/${conversationId}`, { params }),
-  sendMessage: (data: { recipientId: string; content: string; listingId?: string }) =>
+    api.get(`/messages/${conversationId}/messages`, { params }),
+  createConversation: (data: { participantId: string; listingId?: string; content?: string }) =>
     api.post('/messages', data),
+  sendMessage: (conversationId: string, data: { content: string }) =>
+    api.post(`/messages/${conversationId}/messages`, data),
   markAsRead: (conversationId: string) =>
-    api.post(`/messages/conversations/${conversationId}/read`),
+    api.post(`/messages/${conversationId}/read`),
 };
 
 // Admin API (Super Admin only)
