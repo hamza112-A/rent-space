@@ -8,7 +8,8 @@ const {
   uploadIDDocument,
   verifyBiometric,
   getReviews,
-  addReview
+  addReview,
+  searchUsers
 } = require('../controllers/userController');
 const { protect, requireEmailVerification, requirePhoneVerification } = require('../middleware/auth');
 const { uploadMultiple } = require('../middleware/upload');
@@ -22,6 +23,9 @@ router.use(protect);
 router.get('/profile', getProfile);
 router.patch('/profile', uploadMultiple.single('avatar'), updateProfile);
 router.get('/stats', getUserStats);
+
+// Search users (for disputes, messages, etc.)
+router.get('/search', searchUsers);
 
 // Verification routes
 router.get('/verification', getVerificationStatus);

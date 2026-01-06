@@ -14,15 +14,28 @@ import {
   XCircle,
   Eye,
   Search,
-  Filter
+  Filter,
+  User as UserIcon
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import api from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
+
+interface User {
+  _id: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  avatar?: { url: string };
+  role: string;
+}
 
 interface Dispute {
   _id: string;
@@ -61,6 +74,13 @@ const Disputes: React.FC = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [filter, setFilter] = useState('all');
 
+  // User search states
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [searchedUsers, setSearchedUsers] = useState<User[]>([]);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+
   // Form states
   const [formData, setFormData] = useState({
     respondentId: '',
@@ -74,6 +94,31 @@ const Disputes: React.FC = () => {
   useEffect(() => {
     fetchDisputes();
   }, []);
+
+  // Search users when query changes
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (userSearchQuery.length >= 2) {
+        searchUsers(userSearchQuery);
+      } else {
+        setSearchedUsers([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [userSearchQuery]);
+
+  const searchUsers = async (query: string) => {
+    try {
+      setSearchingUsers(true);
+      const response = await api.get(`/users/search?query=${encodeURIComponent(query)}`);
+      setSearchedUsers(response.data.data);
+    } catch (error: any) {
+      console.error('Failed to search users:', error);
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
 
   const fetchDisputes = async () => {
     try {
@@ -94,9 +139,22 @@ const Disputes: React.FC = () => {
   const handleCreateDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!selectedUser) {
+      toast({
+        title: 'Error',
+        description: 'Please select a user to file dispute against',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       const payload = {
-        ...formData,
+        respondentId: selectedUser._id,
+        bookingId: formData.bookingId || undefined,
+        category: formData.category,
+        subject: formData.subject,
+        description: formData.description,
         requestedAmount: formData.requestedAmount ? parseFloat(formData.requestedAmount) : undefined
       };
 
@@ -116,6 +174,8 @@ const Disputes: React.FC = () => {
         description: '',
         requestedAmount: ''
       });
+      setSelectedUser(null);
+      setUserSearchQuery('');
       fetchDisputes();
     } catch (error: any) {
       toast({
@@ -180,14 +240,88 @@ const Disputes: React.FC = () => {
             </DialogHeader>
             <form onSubmit={handleCreateDispute} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="respondentId">Respondent User ID *</Label>
-                <Input
-                  id="respondentId"
-                  required
-                  value={formData.respondentId}
-                  onChange={(e) => setFormData({ ...formData, respondentId: e.target.value })}
-                  placeholder="Enter the user ID of the other party"
-                />
+                <Label htmlFor="respondent">Select User (Other Party) *</Label>
+                <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={userSearchOpen}
+                      className="w-full justify-between"
+                    >
+                      {selectedUser ? (
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={selectedUser.avatar?.url} />
+                            <AvatarFallback>{selectedUser.fullName[0]}</AvatarFallback>
+                          </Avatar>
+                          <span className="truncate">{selectedUser.fullName}</span>
+                          <Badge variant="secondary" className="ml-2">
+                            {selectedUser.role}
+                          </Badge>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-muted-foreground">Search user by name, email, or phone...</span>
+                          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[500px] p-0">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Type to search users..."
+                        value={userSearchQuery}
+                        onValueChange={setUserSearchQuery}
+                      />
+                      <CommandList>
+                        <CommandEmpty>
+                          {searchingUsers ? (
+                            <div className="flex items-center justify-center py-6">
+                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                            </div>
+                          ) : userSearchQuery.length < 2 ? (
+                            'Type at least 2 characters to search...'
+                          ) : (
+                            'No users found.'
+                          )}
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {searchedUsers.map((searchUser) => (
+                            <CommandItem
+                              key={searchUser._id}
+                              value={searchUser._id}
+                              onSelect={() => {
+                                setSelectedUser(searchUser);
+                                setUserSearchOpen(false);
+                              }}
+                            >
+                              <div className="flex items-center gap-3 w-full">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={searchUser.avatar?.url} />
+                                  <AvatarFallback>{searchUser.fullName[0]}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium truncate">{searchUser.fullName}</p>
+                                  <p className="text-sm text-muted-foreground truncate">
+                                    {searchUser.email}
+                                  </p>
+                                </div>
+                                <Badge variant="outline">{searchUser.role}</Badge>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {selectedUser && (
+                  <p className="text-xs text-muted-foreground">
+                    Selected: {selectedUser.fullName} ({selectedUser.email})
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

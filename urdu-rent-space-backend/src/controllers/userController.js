@@ -412,6 +412,38 @@ const addReview = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Search users for dispute filing
+// @route   GET /api/v1/users/search
+// @access  Private
+const searchUsers = asyncHandler(async (req, res, next) => {
+  const { query } = req.query;
+  
+  if (!query || query.trim().length < 2) {
+    return res.json({
+      success: true,
+      data: []
+    });
+  }
+
+  // Search by name, email, or phone
+  const users = await User.find({
+    _id: { $ne: req.user._id }, // Exclude current user
+    status: 'active',
+    $or: [
+      { fullName: new RegExp(query, 'i') },
+      { email: new RegExp(query, 'i') },
+      { phone: new RegExp(query, 'i') }
+    ]
+  })
+  .select('_id fullName email phone avatar role')
+  .limit(20);
+
+  res.json({
+    success: true,
+    data: users
+  });
+});
+
 module.exports = {
   getProfile,
   updateProfile,
@@ -421,5 +453,6 @@ module.exports = {
   uploadIDDocument,
   verifyBiometric,
   getReviews,
-  addReview
+  addReview,
+  searchUsers
 };

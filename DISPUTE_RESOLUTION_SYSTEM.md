@@ -75,6 +75,7 @@ GET    /api/v1/disputes/my-disputes        - Get user's disputes
 GET    /api/v1/disputes/:id                - Get dispute details
 POST   /api/v1/disputes/:id/messages       - Add message to dispute
 POST   /api/v1/disputes/:id/respond        - Submit respondent response
+GET    /api/v1/users/search?query=...      - Search users by name/email/phone
 ```
 
 ### Admin Endpoints (Super Admin Only)
@@ -150,13 +151,20 @@ PUT    /api/v1/disputes/:id/close          - Close dispute
 1. Navigate to Dashboard → Disputes
 2. Click "File New Dispute"
 3. Fill in the required information:
-   - Respondent User ID
+   - **Select User**: Search and select the other party by typing their name, email, or phone number
    - Booking ID (if applicable)
    - Category
    - Subject
    - Detailed description
    - Requested amount (if applicable)
 4. Submit the dispute
+
+**User Selection Feature:**
+- Type at least 2 characters to start searching
+- Search by name, email, or phone number
+- See user's avatar, name, email, and role
+- Select from the dropdown list
+- System automatically fills in the respondent ID
 
 #### Tracking a Dispute
 - View all your disputes in the Disputes tab
