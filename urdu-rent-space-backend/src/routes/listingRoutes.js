@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { protect, optionalAuth } = require('../middleware/auth');
+const { protect, optionalAuth, ownerOnly } = require('../middleware/auth');
 const Listing = require('../models/Listing');
 const asyncHandler = require('../middleware/asyncHandler');
 const { upload } = require('../middleware/upload');
 const { uploadToCloudinary } = require('../services/uploadService');
 
 // @route   GET /api/v1/listings/user/my-listings (MUST be before /:id)
-router.get('/user/my-listings', protect, asyncHandler(async (req, res) => {
+// Only owners can have listings
+router.get('/user/my-listings', protect, ownerOnly, asyncHandler(async (req, res) => {
   const listings = await Listing.find({ owner: req.user._id }).sort({ createdAt: -1 });
   res.json({ success: true, data: listings });
 }));
@@ -96,7 +97,8 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
 }));
 
 // @route   POST /api/v1/listings
-router.post('/', protect, upload.array('images', 10), asyncHandler(async (req, res) => {
+// Only owners can create listings
+router.post('/', protect, ownerOnly, upload.array('images', 10), asyncHandler(async (req, res) => {
   const User = require('../models/User');
   
   // Get user's subscription info

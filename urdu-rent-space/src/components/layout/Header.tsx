@@ -244,13 +244,15 @@ const Header: React.FC = () => {
               </>
             )}
 
-            {/* Create Listing */}
-            <Link to="/create-listing">
-              <Button variant="secondary" size="sm" className="gap-2">
-                <Plus className="w-4 h-4" />
-                {t.nav.createListing}
-              </Button>
-            </Link>
+            {/* Create Listing - Only for owners */}
+            {(!isAuthenticated || user?.role === 'owner' || user?.role === 'both') && (
+              <Link to="/create-listing">
+                <Button variant="secondary" size="sm" className="gap-2">
+                  <Plus className="w-4 h-4" />
+                  {t.nav.createListing}
+                </Button>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -357,13 +359,15 @@ const Header: React.FC = () => {
                 </div>
               )}
 
-              {/* Create Listing */}
-              <Link to="/create-listing" onClick={() => setIsMenuOpen(false)}>
-                <Button variant="secondary" className="w-full gap-2">
-                  <Plus className="w-4 h-4" />
-                  {t.nav.createListing}
-                </Button>
-              </Link>
+              {/* Create Listing - Only for owners */}
+              {(!isAuthenticated || user?.role === 'owner' || user?.role === 'both') && (
+                <Link to="/create-listing" onClick={() => setIsMenuOpen(false)}>
+                  <Button variant="secondary" className="w-full gap-2">
+                    <Plus className="w-4 h-4" />
+                    {t.nav.createListing}
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </div>

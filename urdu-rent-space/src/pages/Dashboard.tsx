@@ -47,15 +47,20 @@ const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Check user role
+  const isOwner = user?.role === 'owner' || user?.role === 'both';
+  const isBorrower = user?.role === 'borrower' || user?.role === 'both';
+
+  // Build tabs based on user role
   const baseTabs = [
-    { id: 'overview', label: t.dashboard.overview, icon: LayoutDashboard },
-    { id: 'listings', label: t.dashboard.myListings, icon: Package },
-    { id: 'bookings', label: t.dashboard.myBookings, icon: Calendar },
-    { id: 'messages', label: t.dashboard.messages, icon: MessageSquare },
-    { id: 'earnings', label: t.dashboard.earnings, icon: DollarSign },
-    { id: 'verification', label: t.dashboard.verification, icon: Shield },
-    { id: 'settings', label: t.dashboard.settings, icon: Settings },
-  ];
+    { id: 'overview', label: t.dashboard.overview, icon: LayoutDashboard, roles: ['owner', 'borrower', 'both'] },
+    { id: 'listings', label: t.dashboard.myListings, icon: Package, roles: ['owner', 'both'] },
+    { id: 'bookings', label: t.dashboard.myBookings, icon: Calendar, roles: ['owner', 'borrower', 'both'] },
+    { id: 'messages', label: t.dashboard.messages, icon: MessageSquare, roles: ['owner', 'borrower', 'both'] },
+    { id: 'earnings', label: t.dashboard.earnings, icon: DollarSign, roles: ['owner', 'both'] },
+    { id: 'verification', label: t.dashboard.verification, icon: Shield, roles: ['owner', 'borrower', 'both'] },
+    { id: 'settings', label: t.dashboard.settings, icon: Settings, roles: ['owner', 'borrower', 'both'] },
+  ].filter(tab => tab.roles.includes(user?.role || 'borrower'));
 
   const adminTabs = [
     { id: 'admin-dashboard', label: t.admin?.dashboard || 'Admin Dashboard', icon: BarChart3 },
@@ -124,12 +129,14 @@ const Dashboard: React.FC = () => {
       
       {/* Quick Actions */}
       <div className="mt-6 pt-6 border-t border-border space-y-2">
-        <Link to="/create-listing">
-          <Button variant="outline" className="w-full gap-2 justify-start">
-            <Plus className="h-4 w-4" />
-            {t.nav.createListing}
-          </Button>
-        </Link>
+        {isOwner && (
+          <Link to="/create-listing">
+            <Button variant="outline" className="w-full gap-2 justify-start">
+              <Plus className="h-4 w-4" />
+              {t.nav.createListing}
+            </Button>
+          </Link>
+        )}
         <Link to="/subscription">
           <Button variant="outline" className="w-full gap-2 justify-start text-amber-600 border-amber-200 hover:bg-amber-50">
             <Crown className="h-4 w-4" />
@@ -176,10 +183,10 @@ const Dashboard: React.FC = () => {
           <main className="flex-1 p-4 lg:p-8 mt-14 lg:mt-0">
             <div className="max-w-6xl mx-auto">
               {activeTab === 'overview' && <DashboardOverview />}
-              {activeTab === 'listings' && <MyListings />}
+              {activeTab === 'listings' && isOwner && <MyListings />}
               {activeTab === 'bookings' && <MyBookings />}
               {activeTab === 'messages' && <Messages />}
-              {activeTab === 'earnings' && <Earnings />}
+              {activeTab === 'earnings' && isOwner && <Earnings />}
               {activeTab === 'verification' && <Verification />}
               {activeTab === 'settings' && <AccountSettings />}
               {/* Admin tabs - only rendered for super admins */}

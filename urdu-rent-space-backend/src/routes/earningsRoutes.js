@@ -6,18 +6,19 @@ const {
   getPayoutMethods,
   addPayoutMethod
 } = require('../controllers/earningsController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, ownerOnly } = require('../middleware/auth');
 
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication and owner role
 router.use(protect);
+router.use(ownerOnly);
 
-// Allow all authenticated users to view earnings (they'll only see their own)
+// Earnings routes - only owners can have earnings
 router.get('/summary', getEarningsSummary);
 router.get('/transactions', getEarningsTransactions);
 
-// Payout routes require owner/both role
+// Payout routes
 router.post('/payout', authorize('owner', 'both'), requestPayout);
 router.get('/payout-methods', getPayoutMethods);
 router.post('/payout-methods', addPayoutMethod);

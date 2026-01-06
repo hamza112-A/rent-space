@@ -68,6 +68,36 @@ const authorize = (...roles) => {
   };
 };
 
+// Owner only access (can create listings, manage rentals)
+// Roles: 'owner' or 'both' can access
+const ownerOnly = (req, res, next) => {
+  if (!req.user) {
+    return next(new ErrorResponse('Not authorized to access this route', 401));
+  }
+
+  const allowedRoles = ['owner', 'both'];
+  if (!allowedRoles.includes(req.user.role) && !req.user.isAdmin) {
+    return next(new ErrorResponse('Only owners can perform this action. Please update your account role to become an owner.', 403));
+  }
+
+  next();
+};
+
+// Borrower only access (can book/rent items)
+// Roles: 'borrower' or 'both' can access
+const borrowerOnly = (req, res, next) => {
+  if (!req.user) {
+    return next(new ErrorResponse('Not authorized to access this route', 401));
+  }
+
+  const allowedRoles = ['borrower', 'both'];
+  if (!allowedRoles.includes(req.user.role) && !req.user.isAdmin) {
+    return next(new ErrorResponse('Only borrowers can perform this action.', 403));
+  }
+
+  next();
+};
+
 // Admin only access
 const adminOnly = (req, res, next) => {
   if (!req.user) {
@@ -261,6 +291,8 @@ const optionalAuth = asyncHandler(async (req, res, next) => {
 module.exports = {
   protect,
   authorize,
+  ownerOnly,
+  borrowerOnly,
   adminOnly,
   superAdminOnly,
   ownerOrAdmin,

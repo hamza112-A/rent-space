@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect } = require('../middleware/auth');
+const { protect, borrowerOnly, ownerOnly } = require('../middleware/auth');
 const Booking = require('../models/Booking');
 const Listing = require('../models/Listing');
 const asyncHandler = require('../middleware/asyncHandler');
@@ -10,12 +10,23 @@ router.get('/', protect, asyncHandler(async (req, res) => {
   const { status, type } = req.query;
   const query = {};
 
+  // Filter based on user role and type parameter
   if (type === 'renter') {
+    // Only borrowers/both can see their rentals
     query.renter = req.user._id;
   } else if (type === 'owner') {
+    // Only owners/both can see bookings for their listings
     query.owner = req.user._id;
   } else {
-    query.$or = [{ renter: req.user._id }, { owner: req.user._id }];
+    // Show all bookings related to user based on their role
+    if (req.user.role === 'borrower') {
+      query.renter = req.user._id;
+    } else if (req.user.role === 'owner') {
+      query.owner = req.user._id;
+    } else {
+      // 'both' role can see all their bookings
+      query.$or = [{ renter: req.user._id }, { owner: req.user._id }];
+    }
   }
 
   if (status) query.status = status;
@@ -49,7 +60,8 @@ router.get('/:id', protect, asyncHandler(async (req, res) => {
 }));
 
 // @route   POST /api/v1/bookings
-router.post('/', protect, asyncHandler(async (req, res) => {
+// Only borrowers can create bookings (rent items)
+router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
   const { listingId, startDate, endDate, message } = req.body;
 
   const listing = await Listing.findById(listingId);
@@ -105,13 +117,20 @@ router.put('/:id/status', protect, asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Booking not found' });
   }
 
-  // Only owner can approve/reject, only renter can cancel
-  if (['approved', 'rejected'].includes(status) && booking.owner.toString() !== req.user._id.toString()) {
-    return res.status(403).json({ success: false, message: 'Only owner can approve/reject' });
+  // Only owner can approve/reject
+  if (['approved', 'rejected'].includes(status)) {
+    if (booking.owner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Only the listing owner can approve/reject bookings' });
+    }
+    // Verify user has owner role
+    if (!['owner', 'both'].includes(req.user.role) && !req.user.isAdmin) {
+      return res.status(403).json({ success: false, message: 'Only owners can approve/reject bookings' });
+    }
   }
 
+  // Only renter can cancel
   if (status === 'cancelled' && booking.renter.toString() !== req.user._id.toString()) {
-    return res.status(403).json({ success: false, message: 'Only renter can cancel' });
+    return res.status(403).json({ success: false, message: 'Only the renter can cancel this booking' });
   }
 
   booking.status = status;
