@@ -53,7 +53,8 @@ const CheckoutForm: React.FC<{ amount: number; bookingId?: string }> = ({ amount
       navigate('/payment/failed');
     } else if (paymentIntent?.status === 'succeeded') {
       await paymentApi.confirm({ paymentIntentId: paymentIntent.id });
-      navigate('/payment/success');
+      // Pass bookingId to success page so user can leave a review
+      navigate(`/payment/success${bookingId ? `?bookingId=${bookingId}` : ''}`);
     }
     setLoading(false);
   };

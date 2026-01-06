@@ -203,7 +203,8 @@ router.post('/confirm', protect, asyncHandler(async (req, res) => {
     if (payment.booking) {
       const booking = await Booking.findByIdAndUpdate(payment.booking, {
         paymentStatus: 'paid',
-        status: 'approved'
+        status: 'completed', // Mark as completed so users can leave reviews
+        completedAt: new Date()
       }, { new: true });
       
       // Ensure payee is set (owner of the listing)
