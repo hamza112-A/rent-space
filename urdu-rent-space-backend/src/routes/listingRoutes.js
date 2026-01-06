@@ -83,7 +83,10 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
 // @route   GET /api/v1/listings/:id
 router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   const listing = await Listing.findById(req.params.id)
-    .populate('owner', 'fullName profileImage phone verificationLevel createdAt isEmailVerified');
+    .populate({
+      path: 'owner',
+      select: 'fullName profileImage phone createdAt verification role',
+    });
   
   if (!listing) {
     return res.status(404).json({ success: false, message: 'Listing not found' });
@@ -93,7 +96,32 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
   listing.stats.views += 1;
   await listing.save({ validateBeforeSave: false });
 
-  res.json({ success: true, data: listing });
+  // Convert to object to include virtuals and add computed fields
+  const listingObj = listing.toObject();
+  
+  // Add owner verification info
+  if (listingObj.owner) {
+    const owner = listingObj.owner;
+    const verification = owner.verification || {};
+    
+    // Calculate verification level
+    let level = 0;
+    if (verification.email?.verified) level++;
+    if (verification.phone?.verified) level++;
+    if (verification.identity?.verified) level++;
+    if (verification.biometric?.verified) level++;
+    
+    owner.verificationLevel = level === 4 ? 'Fully Verified' : 
+                              level >= 2 ? 'Verified' : 
+                              level === 1 ? 'Basic' : 'Unverified';
+    owner.isEmailVerified = verification.email?.verified || false;
+    owner.isPhoneVerified = verification.phone?.verified || false;
+    
+    // Remove sensitive verification details
+    delete owner.verification;
+  }
+
+  res.json({ success: true, data: listingObj });
 }));
 
 // @route   POST /api/v1/listings

@@ -565,6 +565,29 @@ const ListingDetail: React.FC = () => {
 
                   <Separator />
 
+                  {/* Owner Quick Info */}
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={owner.profileImage?.url} />
+                      <AvatarFallback>{owner.fullName?.[0] || 'O'}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground truncate">{owner.fullName || 'Owner'}</p>
+                        {owner.isEmailVerified && (
+                          <Badge className="gap-1 bg-green-500/10 text-green-600 border-green-500/20 text-xs">
+                            <CheckCircle2 className="h-3 w-3" />
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {owner.verificationLevel || 'Member'} • {t.listing.memberSince} {owner.createdAt ? new Date(owner.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
                   {/* Calendar */}
                   <div>
                     <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
@@ -588,11 +611,27 @@ const ListingDetail: React.FC = () => {
                         }
                       }}
                     />
+                    
+                    {/* Blocked Dates Info */}
                     {blockedDates.length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                        <span className="w-3 h-3 bg-destructive/20 rounded"></span>
-                        Dates with strikethrough are not available
-                      </p>
+                      <div className="mt-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                        <p className="text-sm font-medium text-destructive flex items-center gap-2 mb-2">
+                          <AlertCircle className="h-4 w-4" />
+                          Unavailable Dates
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {blockedDates.slice(0, 5).map((date: Date, idx: number) => (
+                            <Badge key={idx} variant="outline" className="text-xs text-destructive border-destructive/30">
+                              {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </Badge>
+                          ))}
+                          {blockedDates.length > 5 && (
+                            <Badge variant="outline" className="text-xs text-destructive border-destructive/30">
+                              +{blockedDates.length - 5} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
 
