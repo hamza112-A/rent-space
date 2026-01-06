@@ -87,17 +87,19 @@ exports.createDispute = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Get all disputes for current user (complainant or respondent)
+// @desc    Get all disputes for current user
 // @route   GET /api/v1/disputes/my-disputes
 // @access  Private
+// NOTE: Regular users only see disputes they filed (as complainant).
+//       Respondents should NOT see disputes filed against them - only super admin handles those.
+//       Admins/SuperAdmins can see all disputes via /admin/all endpoint.
 exports.getMyDisputes = asyncHandler(async (req, res, next) => {
   const { status, category } = req.query;
   
+  // Regular users only see disputes they filed (as complainant)
+  // Disputes filed against them go to super admin, not to them directly
   const query = {
-    $or: [
-      { complainant: req.user._id },
-      { respondent: req.user._id }
-    ]
+    complainant: req.user._id
   };
 
   if (status) {
@@ -141,11 +143,10 @@ exports.getDispute = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Dispute not found', 404));
   }
 
-  // PRIVACY CHECK: Only allow access to complainant, respondent, or admin
-  // This ensures disputes are private one-to-one between the two parties
+  // PRIVACY CHECK: Only allow access to complainant or admin
+  // Respondents should NOT see disputes filed against them - super admin handles those
   if (
     dispute.complainant._id.toString() !== req.user._id.toString() &&
-    dispute.respondent._id.toString() !== req.user._id.toString() &&
     !req.user.isSuperAdmin &&
     !req.user.isAdmin
   ) {
@@ -170,12 +171,11 @@ exports.addDisputeMessage = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Dispute not found', 404));
   }
 
-  // Determine sender role
+  // Determine sender role - only complainant and admin can message
+  // Respondents should not have access to disputes filed against them
   let senderRole;
   if (dispute.complainant.toString() === req.user._id.toString()) {
     senderRole = 'complainant';
-  } else if (dispute.respondent.toString() === req.user._id.toString()) {
-    senderRole = 'respondent';
   } else if (req.user.isSuperAdmin || req.user.isAdmin) {
     senderRole = 'admin';
   } else {

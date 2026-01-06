@@ -6,7 +6,6 @@ const {
   getMyDisputes,
   getDispute,
   addDisputeMessage,
-  respondToDispute,
   getAllDisputes,
   assignDispute,
   updateDisputeStatus,
@@ -20,7 +19,7 @@ router.post('/', protect, createDispute);
 router.get('/my-disputes', protect, getMyDisputes);
 router.get('/:id', protect, getDispute);
 router.post('/:id/messages', protect, addDisputeMessage);
-router.post('/:id/respond', protect, respondToDispute);
+// Note: respondToDispute removed - disputes go to super admin, not respondent directly
 
 // Admin routes
 router.get('/admin/all', protect, authorize('admin', 'superadmin'), getAllDisputes);

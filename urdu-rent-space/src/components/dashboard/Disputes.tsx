@@ -92,8 +92,10 @@ const Disputes: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchDisputes();
-  }, []);
+    if (user) {
+      fetchDisputes();
+    }
+  }, [user]);
 
   // Search users when query changes
   useEffect(() => {
@@ -123,7 +125,9 @@ const Disputes: React.FC = () => {
   const fetchDisputes = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/disputes/my-disputes');
+      // Super admins see all disputes, regular users see only their own
+      const endpoint = user?.isSuperAdmin ? '/disputes/admin/all' : '/disputes/my-disputes';
+      const response = await api.get(endpoint);
       setDisputes(response.data.data);
     } catch (error: any) {
       toast({
@@ -219,9 +223,13 @@ const Disputes: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dispute Resolution Center</h2>
+          <h2 className="text-3xl font-bold tracking-tight">
+            {user?.isSuperAdmin ? 'All Disputes' : 'Dispute Resolution Center'}
+          </h2>
           <p className="text-muted-foreground">
-            Manage and track your disputes with our support team
+            {user?.isSuperAdmin 
+              ? 'Review and manage all user disputes' 
+              : 'Manage and track your disputes with our support team'}
           </p>
         </div>
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -235,12 +243,15 @@ const Disputes: React.FC = () => {
             <DialogHeader>
               <DialogTitle>File a New Dispute</DialogTitle>
               <DialogDescription>
-                Provide details about your dispute. Our team will review it and get back to you.
+                Provide details about your dispute. Your dispute will be sent to our admin team for review - not to the other party directly.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleCreateDispute} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="respondent">Select User (Other Party) *</Label>
+                <Label htmlFor="respondent">Respondent User ID *</Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Enter the user ID of the other party. This is for admin reference only - they won't see this dispute.
+                </p>
                 <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -433,7 +444,9 @@ const Disputes: React.FC = () => {
             <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No disputes found</h3>
             <p className="text-muted-foreground text-center mb-4">
-              You haven't filed any disputes yet. If you encounter any issues, you can file a dispute above.
+              {user?.isSuperAdmin 
+                ? 'No disputes have been filed yet.'
+                : "You haven't filed any disputes yet. If you encounter any issues, you can file a dispute above."}
             </p>
           </CardContent>
         </Card>
