@@ -4,6 +4,7 @@ const { protect, optionalAuth } = require('../middleware/auth');
 const Listing = require('../models/Listing');
 const asyncHandler = require('../middleware/asyncHandler');
 const { upload } = require('../middleware/upload');
+const { uploadToCloudinary } = require('../services/uploadService');
 
 // @route   GET /api/v1/listings/user/my-listings (MUST be before /:id)
 router.get('/user/my-listings', protect, asyncHandler(async (req, res) => {
@@ -86,13 +87,47 @@ router.post('/', protect, upload.array('images', 10), asyncHandler(async (req, r
 
   req.body.owner = req.user._id;
   
-  // Handle uploaded files
+  // Handle uploaded files - upload to Cloudinary
   if (req.files?.length) {
-    req.body.images = req.files.map((file, index) => ({
-      public_id: file.filename,
-      url: file.path,
-      order: index
-    }));
+    const uploadPromises = req.files.map(async (file, index) => {
+      try {
+        // Try Cloudinary upload
+        if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+          const result = await uploadToCloudinary(file.buffer, {
+            folder: 'listings',
+            width: 1200,
+            height: 800
+          });
+          return {
+            public_id: result.public_id,
+            url: result.secure_url,
+            order: index
+          };
+        } else {
+          // Fallback: Convert to base64 data URL (for development without Cloudinary)
+          const base64 = file.buffer.toString('base64');
+          const dataUrl = `data:${file.mimetype};base64,${base64}`;
+          return {
+            public_id: `local_${Date.now()}_${index}`,
+            url: dataUrl,
+            order: index
+          };
+        }
+      } catch (error) {
+        console.error('Image upload error:', error);
+        // Fallback to base64 on error
+        const base64 = file.buffer.toString('base64');
+        const dataUrl = `data:${file.mimetype};base64,${base64}`;
+        return {
+          public_id: `local_${Date.now()}_${index}`,
+          url: dataUrl,
+          order: index
+        };
+      }
+    });
+    
+    const uploadedImages = await Promise.all(uploadPromises);
+    req.body.images = uploadedImages.filter(img => img !== null);
   }
   
   // Handle mock image URLs from frontend (temporary)
@@ -132,11 +167,42 @@ router.put('/:id', protect, upload.array('images', 10), asyncHandler(async (req,
 
   if (req.files?.length) {
     const existingCount = listing.images?.length || 0;
-    const newImages = req.files.map((file, index) => ({
-      public_id: file.filename,
-      url: file.path,
-      order: existingCount + index
-    }));
+    const uploadPromises = req.files.map(async (file, index) => {
+      try {
+        if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+          const result = await uploadToCloudinary(file.buffer, {
+            folder: 'listings',
+            width: 1200,
+            height: 800
+          });
+          return {
+            public_id: result.public_id,
+            url: result.secure_url,
+            order: existingCount + index
+          };
+        } else {
+          const base64 = file.buffer.toString('base64');
+          const dataUrl = `data:${file.mimetype};base64,${base64}`;
+          return {
+            public_id: `local_${Date.now()}_${index}`,
+            url: dataUrl,
+            order: existingCount + index
+          };
+        }
+      } catch (error) {
+        console.error('Image upload error:', error);
+        const base64 = file.buffer.toString('base64');
+        const dataUrl = `data:${file.mimetype};base64,${base64}`;
+        return {
+          public_id: `local_${Date.now()}_${index}`,
+          url: dataUrl,
+          order: existingCount + index
+        };
+      }
+    });
+    
+    const uploadedImages = await Promise.all(uploadPromises);
+    const newImages = uploadedImages.filter(img => img !== null);
     req.body.images = [...(listing.images || []), ...newImages];
   }
 

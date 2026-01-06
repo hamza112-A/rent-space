@@ -131,7 +131,9 @@ const CreateListing: React.FC = () => {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [images, setImages] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     category: '',
@@ -154,20 +156,50 @@ const CreateListing: React.FC = () => {
   const dynamicFields = formData.category ? categoryFields[formData.category] || [] : [];
 
   const handleImageUpload = () => {
-    // Mock image upload
-    const mockImages = [
-      'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=400',
-      'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=400',
-      'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400',
-    ];
-    if (images.length < 10) {
-      setImages([...images, mockImages[images.length % mockImages.length]]);
-      toast.success('Image uploaded successfully');
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const remainingSlots = 10 - images.length;
+    const filesToAdd = Array.from(files).slice(0, remainingSlots);
+
+    filesToAdd.forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload only image files');
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size should be less than 5MB');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImages((prev) => [...prev, event.target!.result as string]);
+          setImageFiles((prev) => [...prev, file]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    if (filesToAdd.length > 0) {
+      toast.success(`${filesToAdd.length} image(s) added`);
     }
   };
 
   const removeImage = (index: number) => {
     setImages(images.filter((_, i) => i !== index));
+    setImageFiles(imageFiles.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
@@ -225,11 +257,10 @@ const CreateListing: React.FC = () => {
         }
       });
 
-      // Note: For real image upload, you'd append actual File objects here
-      // For now, we're sending the mock image URLs
-      if (images.length > 0) {
-        submitData.append('imageUrls', JSON.stringify(images));
-      }
+      // Append actual image files
+      imageFiles.forEach((file) => {
+        submitData.append('images', file);
+      });
 
       // Use the API client which handles cookies automatically
       await listingApi.create(submitData);
@@ -484,6 +515,16 @@ const CreateListing: React.FC = () => {
                     <Label className="text-lg font-semibold">Upload Photos</Label>
                     <p className="text-muted-foreground text-sm mt-1">Add up to 10 photos. First photo will be the cover.</p>
                   </div>
+
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                  />
 
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     {images.map((img, idx) => (
