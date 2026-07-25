@@ -579,6 +579,81 @@ const AdminDisputes: React.FC = () => {
                       </>
                     )}
                   </div>
+
+                  {/* Resolution Summary (if already resolved) */}
+                  {selectedDispute.resolution?.decision && (
+                    <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm flex items-center gap-2 text-green-700 dark:text-green-300">
+                          <CheckCircle className="h-4 w-4" />
+                          Resolution Details
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Decision</p>
+                            <p className="font-medium">{selectedDispute.resolution.decision}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Action</p>
+                            <Badge variant="secondary">
+                              {selectedDispute.resolution.action?.replace(/_/g, ' ') || 'N/A'}
+                            </Badge>
+                          </div>
+                        </div>
+                        {selectedDispute.resolution.explanation && (
+                          <div>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Explanation</p>
+                            <p className="text-sm text-muted-foreground">{selectedDispute.resolution.explanation}</p>
+                          </div>
+                        )}
+                        {selectedDispute.awardedAmount !== undefined && selectedDispute.awardedAmount > 0 && (
+                          <div className="flex items-center gap-2 p-3 rounded-lg bg-green-100 dark:bg-green-900/30">
+                            <TrendingUp className="h-4 w-4 text-green-600" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Payout Awarded</p>
+                              <p className="font-semibold text-green-700 dark:text-green-300">
+                                PKR {selectedDispute.awardedAmount.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        {selectedDispute.resolution.resolvedAt && (
+                          <p className="text-xs text-muted-foreground">
+                            Resolved on {new Date(selectedDispute.resolution.resolvedAt).toLocaleString()}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Timeline */}
+                  {selectedDispute.timeline?.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Timeline</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {selectedDispute.timeline.map((event, idx) => (
+                            <div key={idx} className="flex items-start gap-3">
+                              <div className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium capitalize">
+                                  {event.action.replace(/_/g, ' ')}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(event.timestamp).toLocaleString()}
+                                  {event.performedBy && ` · by ${event.performedBy.fullName}`}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </ScrollArea>
             </>
@@ -588,11 +663,11 @@ const AdminDisputes: React.FC = () => {
 
       {/* Resolve Dialog */}
       <Dialog open={showResolveDialog} onOpenChange={setShowResolveDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Resolve Dispute</DialogTitle>
             <DialogDescription>
-              Provide resolution details for this dispute
+              Provide resolution details. This action will close the dispute and notify both parties.
             </DialogDescription>
           </DialogHeader>
           
@@ -603,7 +678,7 @@ const AdminDisputes: React.FC = () => {
                 id="decision"
                 value={resolutionForm.decision}
                 onChange={(e) => setResolutionForm({ ...resolutionForm, decision: e.target.value })}
-                placeholder="Brief decision summary"
+                placeholder="e.g. Refund approved for complainant"
               />
             </div>
 
@@ -613,7 +688,7 @@ const AdminDisputes: React.FC = () => {
                 id="explanation"
                 value={resolutionForm.explanation}
                 onChange={(e) => setResolutionForm({ ...resolutionForm, explanation: e.target.value })}
-                placeholder="Detailed explanation of the resolution"
+                placeholder="Detailed explanation visible to both parties..."
                 rows={4}
               />
             </div>
@@ -639,16 +714,33 @@ const AdminDisputes: React.FC = () => {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="awardedAmount">Awarded Amount (PKR)</Label>
-              <Input
-                id="awardedAmount"
-                type="number"
-                min="0"
-                value={resolutionForm.awardedAmount}
-                onChange={(e) => setResolutionForm({ ...resolutionForm, awardedAmount: e.target.value })}
-                placeholder="0"
-              />
+            {/* Payout Adjustment */}
+            <div className="space-y-2 p-4 rounded-lg border bg-muted/30">
+              <Label className="text-sm font-semibold flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Payout Adjustment (Optional)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                If a refund or compensation is awarded, enter the PKR amount here. This will be
+                recorded and trigger the payout workflow.
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">PKR</span>
+                <Input
+                  id="awardedAmount"
+                  type="number"
+                  min="0"
+                  value={resolutionForm.awardedAmount}
+                  onChange={(e) => setResolutionForm({ ...resolutionForm, awardedAmount: e.target.value })}
+                  placeholder="0"
+                  className="flex-1"
+                />
+              </div>
+              {resolutionForm.awardedAmount && parseFloat(resolutionForm.awardedAmount) > 0 && (
+                <p className="text-xs text-green-600 font-medium">
+                  PKR {parseFloat(resolutionForm.awardedAmount).toLocaleString()} will be awarded to the complainant
+                </p>
+              )}
             </div>
           </div>
 
@@ -656,8 +748,11 @@ const AdminDisputes: React.FC = () => {
             <Button variant="outline" onClick={() => setShowResolveDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleResolveDispute}>
-              Resolve Dispute
+            <Button
+              onClick={handleResolveDispute}
+              disabled={!resolutionForm.decision || !resolutionForm.explanation || !resolutionForm.action}
+            >
+              Resolve & Close Dispute
             </Button>
           </DialogFooter>
         </DialogContent>
