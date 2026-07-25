@@ -96,25 +96,48 @@ const PaymentForm: React.FC<{
 
     setLoading(true);
     const cardElement = elements.getElement(CardElement);
-    if (!cardElement) return;
-
-    const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-      payment_method: { card: cardElement }
-    });
-
-    if (error) {
-      toast.error(error.message || 'Payment failed');
+    if (!cardElement) {
       setLoading(false);
-    } else if (paymentIntent?.status === 'succeeded') {
-      // Confirm payment and activate subscription
-      try {
-        await paymentApi.confirm({ paymentIntentId: paymentIntent.id });
-        await subscriptionApi.subscribe({ planId: plan.id, paymentIntentId: paymentIntent.id });
-        toast.success(`Successfully subscribed to ${plan.name} plan!`);
-        onSuccess();
-      } catch (err: any) {
-        toast.error(err.response?.data?.message || 'Failed to activate subscription');
+      return;
+    }
+
+    try {
+      // Confirm the payment with billing details
+      const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: cardElement,
+          billing_details: {
+            name: 'Test User', // You can get this from user context
+            email: 'test@example.com', // You can get this from user context
+          }
+        }
+      });
+
+      if (error) {
+        console.error('Stripe error:', error);
+        toast.error(error.message || 'Payment failed. Please try again.');
+        setLoading(false);
+        return;
       }
+
+      if (paymentIntent?.status === 'succeeded') {
+        // Confirm payment and activate subscription
+        try {
+          await paymentApi.confirm({ paymentIntentId: paymentIntent.id });
+          await subscriptionApi.subscribe({ planId: plan.id, paymentIntentId: paymentIntent.id });
+          toast.success(`Successfully subscribed to ${plan.name} plan!`);
+          onSuccess();
+        } catch (err: any) {
+          console.error('Subscription error:', err);
+          toast.error(err.response?.data?.message || 'Failed to activate subscription');
+        }
+      } else {
+        toast.error(`Payment status: ${paymentIntent?.status}. Please try again.`);
+      }
+    } catch (err: any) {
+      console.error('Payment error:', err);
+      toast.error('An unexpected error occurred. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
@@ -137,9 +160,13 @@ const PaymentForm: React.FC<{
         }} />
       </div>
       
-      <p className="text-xs text-center text-muted-foreground">
-        Test card: 4242 4242 4242 4242 | Any future date | Any CVC
-      </p>
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <p className="text-sm font-medium text-blue-900 mb-1">🧪 Test Mode - Use Test Card:</p>
+        <p className="text-xs text-blue-700 font-mono">
+          Card: 4242 4242 4242 4242<br />
+          Expiry: 12/34 | CVC: 123 | ZIP: 12345
+        </p>
+      </div>
       
       <div className="flex gap-3">
         <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
