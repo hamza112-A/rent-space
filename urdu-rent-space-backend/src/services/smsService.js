@@ -1,10 +1,44 @@
 const twilio = require('twilio');
 
-// Initialize Twilio client
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+let cachedClient = null;
+
+/**
+ * Check whether usable Twilio credentials are present.
+ * Twilio account SIDs always start with "AC", so placeholder values are rejected.
+ * @returns {boolean} True if SMS can be sent
+ */
+const isSMSConfigured = () => {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  return Boolean(sid && sid.startsWith('AC') && process.env.TWILIO_AUTH_TOKEN);
+};
+
+/**
+ * Lazily build the Twilio client so that missing or placeholder credentials
+ * surface as a handled request-time error instead of crashing the process on boot.
+ * @returns {Object} Twilio client
+ */
+const getClient = () => {
+  if (cachedClient) {
+    return cachedClient;
+  }
+
+  if (!isSMSConfigured()) {
+    throw new Error(
+      'SMS service is not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN to enable SMS.'
+    );
+  }
+
+  cachedClient = twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+  );
+
+  return cachedClient;
+};
+
+if (!isSMSConfigured()) {
+  console.warn('SMS service disabled: TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN not configured.');
+}
 
 /**
  * Send SMS message
@@ -19,7 +53,7 @@ const sendSMS = async (options) => {
       throw new Error('Phone number and message are required');
     }
 
-    const result = await client.messages.create({
+    const result = await getClient().messages.create({
       body: message,
       from: from || process.env.TWILIO_PHONE_NUMBER,
       to: to
@@ -219,7 +253,7 @@ const formatPhoneNumber = (phone) => {
  */
 const getSMSStatus = async (messageSid) => {
   try {
-    const message = await client.messages(messageSid).fetch();
+    const message = await getClient().messages(messageSid).fetch();
     
     return {
       success: true,
@@ -245,7 +279,7 @@ const getSMSStatus = async (messageSid) => {
 const testSMSConfig = async () => {
   try {
     // Test by fetching account info
-    const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
+    const account = await getClient().api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
     
     return {
       success: true,
@@ -262,6 +296,7 @@ const testSMSConfig = async () => {
 };
 
 module.exports = {
+  isSMSConfigured,
   sendSMS,
   sendOTP,
   sendBookingNotification,
