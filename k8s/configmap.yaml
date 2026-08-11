@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: urdu-rental-config
+  namespace: urdu-rental
+data:
+  # Backend Configuration
+  NODE_ENV: "production"
+  PORT: "5000"
+  API_VERSION: "v1"
+  
+  # Frontend Configuration
+  VITE_API_BASE_URL: "http://backend-service:5000/api/v1"
+  
+  # Database Configuration
+  MONGO_DB_NAME: "urdu_rent_space"
+  
+  # Email Configuration
+  EMAIL_HOST: "smtp.gmail.com"
+  EMAIL_PORT: "587"
+  EMAIL_FROM: "noreply@urdurental.pk"
+  
+  # Rate Limiting
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  
+  # File Upload
+  MAX_FILE_SIZE: "10485760"
+  MAX_FILES_PER_LISTING: "10"
+  
+  # Features
+  ENABLE_EMAIL_NOTIFICATIONS: "true"
+  ENABLE_SMS_NOTIFICATIONS: "true"
+  
+  # Subscription Plans
+  FREE_PLAN_LISTINGS_LIMIT: "3"
+  PREMIUM_PLAN_PRICE_PKR: "500"
+  PREMIUM_PLAN_PRICE_USD: "7.99"

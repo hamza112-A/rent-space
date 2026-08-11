@@ -1,0 +1,64 @@
+name: Deploy to Kubernetes
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker Images"]
+    types:
+      - completed
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Update image tags
+        run: |
+          export IMAGE_TAG=${{ github.sha }}
+          sed -i "s|urdu-rental-backend:latest|${{ secrets.DOCKER_USERNAME }}/urdu-rental-backend:sha-${IMAGE_TAG:0:7}|g" k8s/backend-deployment.yaml
+          sed -i "s|urdu-rental-frontend:latest|${{ secrets.DOCKER_USERNAME }}/urdu-rental-frontend:sha-${IMAGE_TAG:0:7}|g" k8s/frontend-deployment.yaml
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/mongodb-deployment.yaml
+          kubectl apply -f k8s/redis-deployment.yaml
+          kubectl apply -f k8s/backend-deployment.yaml
+          kubectl apply -f k8s/frontend-deployment.yaml
+          kubectl apply -f k8s/ingress.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/backend -n urdu-rental --timeout=5m
+          kubectl rollout status deployment/frontend -n urdu-rental --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n urdu-rental
+          kubectl get svc -n urdu-rental
+          kubectl get ingress -n urdu-rental
+
+      - name: Send Slack notification
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Deployment to Kubernetes ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
