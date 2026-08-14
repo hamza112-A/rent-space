@@ -317,8 +317,10 @@ const AccountSettings: React.FC = () => {
           return;
         }
         const [expiryMonth, expiryYear] = newPaymentMethod.expiry.split('/');
+        // Only the last 4 digits ever leave the browser - the server never
+        // sees (or stores) the full card number.
         details = {
-          cardNumber: newPaymentMethod.cardNumber,
+          last4: newPaymentMethod.cardNumber.replace(/\D/g, '').slice(-4),
           cardName: newPaymentMethod.cardName,
           expiryMonth,
           expiryYear,
@@ -330,7 +332,7 @@ const AccountSettings: React.FC = () => {
         }
         details = {
           bankName: newPaymentMethod.bankName,
-          accountNumber: newPaymentMethod.accountNumber,
+          last4: newPaymentMethod.accountNumber.replace(/\D/g, '').slice(-4),
           accountTitle: newPaymentMethod.accountTitle,
         };
       }

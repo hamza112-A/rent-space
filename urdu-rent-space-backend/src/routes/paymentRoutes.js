@@ -29,6 +29,11 @@ router.get('/methods', protect, asyncHandler(async (req, res) => {
 }));
 
 // @route   POST /api/v1/payments/methods
+// Note: full card/account numbers must never reach this server - actual
+// charges go through Stripe (tokenized client-side via Stripe Elements in
+// Payment.tsx). This endpoint only stores non-sensitive display metadata
+// (last 4 digits), so the client is expected to send `last4`, not a full
+// card/account number.
 router.post('/methods', protect, asyncHandler(async (req, res) => {
   const { type, details } = req.body;
 
@@ -37,19 +42,38 @@ router.post('/methods', protect, asyncHandler(async (req, res) => {
   }
 
   const user = await User.findById(req.user._id);
-  
+
   if (!user.paymentMethods) {
     user.paymentMethods = [];
+  }
+
+  const sanitizedDetails = {
+    mobileNumber: details.mobileNumber,
+    accountTitle: details.accountTitle,
+    cardName: details.cardName,
+    expiryMonth: details.expiryMonth,
+    expiryYear: details.expiryYear,
+    cardBrand: details.cardBrand,
+    bankName: details.bankName,
+    branchCode: details.branchCode
+  };
+
+  if (type === 'card') {
+    if (!/^\d{4}$/.test(details.last4 || '')) {
+      return res.status(400).json({ success: false, message: 'Card last 4 digits are required' });
+    }
+    sanitizedDetails.cardNumber = `****${details.last4}`;
+  } else if (type === 'bank') {
+    if (!/^\d{4}$/.test(details.last4 || '')) {
+      return res.status(400).json({ success: false, message: 'Account last 4 digits are required' });
+    }
+    sanitizedDetails.accountNumber = `****${details.last4}`;
   }
 
   const newMethod = {
     _id: require('mongoose').Types.ObjectId(),
     type,
-    details: {
-      ...details,
-      cardNumber: details.cardNumber ? `****${details.cardNumber.slice(-4)}` : undefined,
-      accountNumber: details.accountNumber ? `****${details.accountNumber.slice(-4)}` : undefined,
-    },
+    details: sanitizedDetails,
     isDefault: user.paymentMethods.length === 0,
     createdAt: new Date()
   };
@@ -109,49 +133,59 @@ router.put('/methods/:id/default', protect, asyncHandler(async (req, res) => {
 // @route   POST /api/v1/payments/create-intent
 // Create a Stripe Payment Intent
 router.post('/create-intent', protect, asyncHandler(async (req, res) => {
-  const { bookingId, amount, currency = 'pkr' } = req.body;
+  const { bookingId, currency = 'pkr' } = req.body;
 
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'Booking ID is required' });
+  }
+
+  const booking = await Booking.findById(bookingId).populate('listing', 'title owner');
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Booking not found' });
+  }
+
+  // Only the renter on this booking may pay for it
+  if (booking.renter.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ success: false, message: 'Not authorized to pay for this booking' });
+  }
+
+  // The amount to charge always comes from the booking's own stored pricing,
+  // never from the client, so it can't be tampered with.
+  const amount = booking.pricing?.totalAmount;
   if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: 'Valid amount is required' });
+    return res.status(400).json({ success: false, message: 'Booking has no valid amount to charge' });
   }
 
-  // Get booking details if bookingId provided
-  let booking = null;
-  let listingOwner = null;
-  if (bookingId) {
-    booking = await Booking.findById(bookingId).populate('listing', 'title owner');
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
-    // Get the owner from the booking or from the listing
-    listingOwner = booking.owner || booking.listing?.owner;
-  }
+  const chargeCurrency = (booking.pricing?.currency || currency).toLowerCase();
+
+  // Get the owner from the booking or from the listing
+  const listingOwner = booking.owner || booking.listing?.owner;
 
   // Create Stripe Payment Intent
   const paymentIntent = await stripe.paymentIntents.create({
     amount: Math.round(amount * 100), // Stripe expects amount in smallest currency unit (paisa for PKR)
-    currency: currency.toLowerCase(),
+    currency: chargeCurrency,
     metadata: {
-      bookingId: bookingId || '',
+      bookingId,
       userId: req.user._id.toString(),
       userEmail: req.user.email
     },
-    description: booking ? `Booking for ${booking.listing?.title}` : 'Payment'
+    description: `Booking for ${booking.listing?.title}`
   });
 
   // Create payment record in database
   const payment = await Payment.create({
-    booking: bookingId || null,
+    booking: bookingId,
     payer: req.user._id,
     payee: listingOwner || null,
-    listing: booking?.listing?._id || null,
+    listing: booking.listing?._id || null,
     method: 'stripe',
     status: 'pending',
     amount: {
-      subtotal: amount,
-      serviceFee: 0,
+      subtotal: booking.pricing?.subtotal ?? amount,
+      serviceFee: booking.pricing?.serviceFee ?? 0,
       total: amount,
-      currency: currency.toUpperCase()
+      currency: chargeCurrency.toUpperCase()
     },
     stripePaymentIntentId: paymentIntent.id
   });
@@ -244,8 +278,19 @@ router.post('/confirm', protect, asyncHandler(async (req, res) => {
 router.get('/status/:paymentIntentId', protect, asyncHandler(async (req, res) => {
   const { paymentIntentId } = req.params;
 
-  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
   const payment = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
+
+  if (!payment) {
+    return res.status(404).json({ success: false, message: 'Payment not found' });
+  }
+
+  const isPayer = payment.payer?.toString() === req.user._id.toString();
+  const isPayee = payment.payee?.toString() === req.user._id.toString();
+  if (!isPayer && !isPayee && !req.user.isAdmin) {
+    return res.status(403).json({ success: false, message: 'Not authorized to view this payment' });
+  }
+
+  const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
   res.json({
     success: true,
@@ -266,6 +311,12 @@ router.get('/:id', protect, asyncHandler(async (req, res) => {
 
   if (!payment) {
     return res.status(404).json({ success: false, message: 'Payment not found' });
+  }
+
+  const isPayer = payment.payer?._id?.toString() === req.user._id.toString();
+  const isPayee = payment.payee?._id?.toString() === req.user._id.toString();
+  if (!isPayer && !isPayee && !req.user.isAdmin) {
+    return res.status(403).json({ success: false, message: 'Not authorized to view this payment' });
   }
 
   res.json({ success: true, data: payment });
@@ -290,51 +341,10 @@ router.post('/initiate', protect, asyncHandler(async (req, res) => {
   });
 }));
 
-// @route   POST /api/v1/payments/webhook
-// Stripe webhook handler
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-
-  try {
-    if (process.env.STRIPE_WEBHOOK_SECRET) {
-      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-    } else {
-      event = req.body;
-    }
-  } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // Handle the event
-  switch (event.type) {
-    case 'payment_intent.succeeded':
-      const paymentIntent = event.data.object;
-      console.log('Payment succeeded:', paymentIntent.id);
-      
-      // Update payment record
-      await Payment.findOneAndUpdate(
-        { stripePaymentIntentId: paymentIntent.id },
-        { status: 'completed', paidAt: new Date(), transactionId: paymentIntent.id }
-      );
-      break;
-
-    case 'payment_intent.payment_failed':
-      const failedPayment = event.data.object;
-      console.log('Payment failed:', failedPayment.id);
-      
-      await Payment.findOneAndUpdate(
-        { stripePaymentIntentId: failedPayment.id },
-        { status: 'failed' }
-      );
-      break;
-
-    default:
-      console.log(`Unhandled event type ${event.type}`);
-  }
-
-  res.json({ received: true });
-});
+// Note: the Stripe webhook handler lives in server.js, registered before the
+// global express.json() middleware — Stripe signature verification requires
+// the raw request body, which wouldn't be available if the route were mounted
+// here (json() would already have parsed and consumed it by the time a request
+// reaches this router).
 
 module.exports = router;

@@ -77,14 +77,17 @@ const userSchema = new mongoose.Schema({
       verified: { type: Boolean, default: false },
       verifiedAt: Date,
       token: String,
-      tokenExpires: Date
+      tokenExpires: Date,
+      attempts: { type: Number, default: 0 },
+      lastSentAt: Date
     },
     phone: {
       verified: { type: Boolean, default: false },
       verifiedAt: Date,
       otp: String,
       otpExpires: Date,
-      attempts: { type: Number, default: 0 }
+      attempts: { type: Number, default: 0 },
+      lastSentAt: Date
     },
     identity: {
       verified: { type: Boolean, default: false },

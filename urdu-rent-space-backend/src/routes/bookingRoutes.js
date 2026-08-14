@@ -174,6 +174,8 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
 }));
 
 // @route   PUT /api/v1/bookings/:id/status
+const BOOKING_STATUSES = ['pending', 'approved', 'rejected', 'cancelled', 'in_progress', 'completed'];
+
 router.put('/:id/status', protect, asyncHandler(async (req, res) => {
   const { status } = req.body;
   const booking = await Booking.findById(req.params.id);
@@ -182,9 +184,21 @@ router.put('/:id/status', protect, asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Booking not found' });
   }
 
+  if (!BOOKING_STATUSES.includes(status)) {
+    return res.status(400).json({ success: false, message: 'Invalid status' });
+  }
+
+  const isRenter = booking.renter.toString() === req.user._id.toString();
+  const isOwner = booking.owner.toString() === req.user._id.toString();
+
+  // Must be a party to this booking (or an admin) to change its status at all
+  if (!isRenter && !isOwner && !req.user.isAdmin) {
+    return res.status(403).json({ success: false, message: 'Not authorized to update this booking' });
+  }
+
   // Only owner can approve/reject
   if (['approved', 'rejected'].includes(status)) {
-    if (booking.owner.toString() !== req.user._id.toString()) {
+    if (!isOwner && !req.user.isAdmin) {
       return res.status(403).json({ success: false, message: 'Only the listing owner can approve/reject bookings' });
     }
     // Verify user has owner role
@@ -194,7 +208,7 @@ router.put('/:id/status', protect, asyncHandler(async (req, res) => {
   }
 
   // Only renter can cancel
-  if (status === 'cancelled' && booking.renter.toString() !== req.user._id.toString()) {
+  if (status === 'cancelled' && !isRenter && !req.user.isAdmin) {
     return res.status(403).json({ success: false, message: 'Only the renter can cancel this booking' });
   }
 

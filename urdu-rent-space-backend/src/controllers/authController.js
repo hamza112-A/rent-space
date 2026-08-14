@@ -55,8 +55,10 @@ const register = asyncHandler(async (req, res, next) => {
   // Set OTP in user document
   user.verification.email.token = emailOTP;
   user.verification.email.tokenExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  user.verification.email.lastSentAt = new Date();
   user.verification.phone.otp = phoneOTP;
   user.verification.phone.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  user.verification.phone.lastSentAt = new Date();
 
   await user.save({ validateBeforeSave: false });
 
@@ -228,8 +230,8 @@ const verifyOTP = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`${type} is already verified`, 400));
   }
 
-  // Check OTP attempts for phone
-  if (type === 'phone' && verification.attempts >= 5) {
+  // Check OTP attempts (applies to both email and phone)
+  if (verification.attempts >= 5) {
     return next(new ErrorResponse('Too many OTP attempts. Please request a new OTP.', 429));
   }
 
@@ -243,10 +245,8 @@ const verifyOTP = asyncHandler(async (req, res, next) => {
 
   // Verify OTP
   if (verification[otpField] !== otp) {
-    if (type === 'phone') {
-      verification.attempts += 1;
-      await user.save({ validateBeforeSave: false });
-    }
+    verification.attempts += 1;
+    await user.save({ validateBeforeSave: false });
     return next(new ErrorResponse('Invalid OTP', 400));
   }
 
@@ -255,10 +255,7 @@ const verifyOTP = asyncHandler(async (req, res, next) => {
   verification.verifiedAt = new Date();
   verification[otpField] = undefined;
   verification[expiryField] = undefined;
-  
-  if (type === 'phone') {
-    verification.attempts = 0;
-  }
+  verification.attempts = 0;
 
   // Activate user if email is verified
   if (type === 'email') {
@@ -349,6 +346,13 @@ const resendOTP = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`${type} is already verified`, 400));
   }
 
+  // Cooldown to prevent resend spam (and to stop attempts from being reset for free)
+  const RESEND_COOLDOWN_MS = 60 * 1000;
+  if (verification.lastSentAt && Date.now() - verification.lastSentAt.getTime() < RESEND_COOLDOWN_MS) {
+    const waitSeconds = Math.ceil((RESEND_COOLDOWN_MS - (Date.now() - verification.lastSentAt.getTime())) / 1000);
+    return next(new ErrorResponse(`Please wait ${waitSeconds} seconds before requesting another OTP`, 429));
+  }
+
   // Generate new OTP
   const newOTP = generateOTP();
   const otpField = type === 'email' ? 'token' : 'otp';
@@ -356,10 +360,8 @@ const resendOTP = asyncHandler(async (req, res, next) => {
 
   verification[otpField] = newOTP;
   verification[expiryField] = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-  if (type === 'phone') {
-    verification.attempts = 0;
-  }
+  verification.attempts = 0;
+  verification.lastSentAt = new Date();
 
   await user.save({ validateBeforeSave: false });
 
@@ -396,21 +398,21 @@ const resendOTP = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Select user role (after registration)
+// @desc    Select/update the current user's role
 // @route   POST /api/v1/auth/select-role
-// @access  Public
+// @access  Private
 const selectRole = asyncHandler(async (req, res, next) => {
-  const { userId, role } = req.body;
+  const { role } = req.body;
 
-  if (!userId || !role) {
-    return next(new ErrorResponse('User ID and role are required', 400));
+  if (!role) {
+    return next(new ErrorResponse('Role is required', 400));
   }
 
   if (!['owner', 'borrower', 'both'].includes(role)) {
     return next(new ErrorResponse('Invalid role selected', 400));
   }
 
-  const user = await User.findById(userId);
+  const user = await User.findById(req.user.id);
 
   if (!user) {
     return next(new ErrorResponse('User not found', 404));

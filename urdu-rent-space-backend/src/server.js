@@ -19,6 +19,8 @@ require('dotenv').config();
 const connectDB = require('./config/database');
 const { errorHandler, notFound } = require('./middleware/errorMiddleware');
 const socketHandler = require('./sockets/socketHandler');
+const Payment = require('./models/Payment');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -52,6 +54,52 @@ connectDB();
 
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
+
+const API_PREFIX = `/api/${process.env.API_VERSION || 'v1'}`;
+
+// Stripe webhook: MUST be registered before express.json() below, since Stripe
+// signature verification requires the raw, unparsed request body. If this were
+// registered after express.json(), the body would already be parsed/consumed
+// and signature verification would always fail.
+app.post(`${API_PREFIX}/payments/webhook`, express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error('STRIPE_WEBHOOK_SECRET is not configured; rejecting webhook request.');
+    return res.status(500).send('Webhook not configured');
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  switch (event.type) {
+    case 'payment_intent.succeeded': {
+      const paymentIntent = event.data.object;
+      await Payment.findOneAndUpdate(
+        { stripePaymentIntentId: paymentIntent.id },
+        { status: 'completed', paidAt: new Date(), transactionId: paymentIntent.id }
+      );
+      break;
+    }
+    case 'payment_intent.payment_failed': {
+      const failedPayment = event.data.object;
+      await Payment.findOneAndUpdate(
+        { stripePaymentIntentId: failedPayment.id },
+        { status: 'failed' }
+      );
+      break;
+    }
+    default:
+      console.log(`Unhandled Stripe event type ${event.type}`);
+  }
+
+  res.json({ received: true });
+});
 
 // Security middleware
 app.use(helmet({
@@ -135,8 +183,6 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-const API_PREFIX = `/api/${process.env.API_VERSION || 'v1'}`;
-
 app.use(`${API_PREFIX}/auth`, authLimiter, authRoutes);
 app.use(`${API_PREFIX}/users`, userRoutes);
 app.use(`${API_PREFIX}/categories`, categoryRoutes);

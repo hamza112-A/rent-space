@@ -81,7 +81,7 @@ export const authApi = {
     api.post('/auth/verify-otp', data),
   resendOTP: (data: { userId: string; type: 'email' | 'phone' }) =>
     api.post('/auth/resend-otp', data),
-  selectRole: (data: { userId: string; role: 'owner' | 'borrower' | 'both' }) =>
+  selectRole: (data: { role: 'owner' | 'borrower' | 'both' }) =>
     api.post('/auth/select-role', data),
   refreshToken: (refreshToken: string) =>
     api.post('/auth/refresh', { refreshToken }),

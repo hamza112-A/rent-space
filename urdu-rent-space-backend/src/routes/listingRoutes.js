@@ -6,6 +6,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const { upload } = require('../middleware/upload');
 const { uploadToCloudinary } = require('../services/uploadService');
 const { getSafetyGuidelinesForCategory, getDefaultDisclaimers } = require('../utils/safetyGuidelines');
+const { escapeRegex } = require('../utils/validation');
 
 // @route   GET /api/v1/listings/safety-guidelines/:category
 // @desc    Get category-specific safety guidelines templates
@@ -44,7 +45,7 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
   
   // Handle location search (city or area)
   if (city || location) {
-    const locationSearch = city || location;
+    const locationSearch = escapeRegex(city || location);
     dbQuery.$or = dbQuery.$or || [];
     dbQuery.$or.push(
       { 'location.city': new RegExp(locationSearch, 'i') },
@@ -59,7 +60,7 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
   }
   
   // Handle search query (supports both 'search' and 'query' params)
-  const searchTerm = search || query;
+  const searchTerm = escapeRegex(search || query);
   if (searchTerm) {
     const searchConditions = [
       { title: new RegExp(searchTerm, 'i') },
@@ -268,7 +269,7 @@ router.put('/:id', protect, upload.array('images', 10), asyncHandler(async (req,
     return res.status(404).json({ success: false, message: 'Listing not found' });
   }
 
-  if (listing.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+  if (listing.owner.toString() !== req.user._id.toString() && !req.user.isAdmin && !req.user.isSuperAdmin) {
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
 
@@ -348,7 +349,7 @@ router.delete('/:id', protect, asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'Listing not found' });
   }
 
-  if (listing.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+  if (listing.owner.toString() !== req.user._id.toString() && !req.user.isAdmin && !req.user.isSuperAdmin) {
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
 

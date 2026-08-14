@@ -6,6 +6,7 @@ const Listing = require('../models/Listing');
 const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
 const asyncHandler = require('../middleware/asyncHandler');
+const { escapeRegex } = require('../utils/validation');
 
 // All routes require super admin role
 router.use(protect, superAdminOnly);
@@ -43,7 +44,10 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
 router.get('/users', asyncHandler(async (req, res) => {
   const { page = 1, limit = 20, search, status, role } = req.query;
   const query = {};
-  if (search) query.$or = [{ fullName: new RegExp(search, 'i') }, { email: new RegExp(search, 'i') }, { phone: new RegExp(search, 'i') }];
+  if (search) {
+    const safeSearch = escapeRegex(search);
+    query.$or = [{ fullName: new RegExp(safeSearch, 'i') }, { email: new RegExp(safeSearch, 'i') }, { phone: new RegExp(safeSearch, 'i') }];
+  }
   if (status) query.status = status;
   if (role) query.role = role;
 

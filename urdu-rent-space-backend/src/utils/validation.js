@@ -231,8 +231,20 @@ const isValidCoordinates = (coordinates) => {
  */
 const sanitizeInput = (input) => {
   if (typeof input !== 'string') return input;
-  
+
   return validator.escape(input);
+};
+
+/**
+ * Escape regex special characters so user input can be safely used inside a
+ * `new RegExp()` (e.g. for search filters) without enabling ReDoS or
+ * unintended pattern matching.
+ * @param {string} input - Raw user input
+ * @returns {string} Regex-safe string
+ */
+const escapeRegex = (input) => {
+  if (typeof input !== 'string') return '';
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
 /**
@@ -327,6 +339,7 @@ module.exports = {
   isValidCNIC,
   isValidCoordinates,
   sanitizeInput,
+  escapeRegex,
   validateFile,
   validateFiles
 };

@@ -27,12 +27,12 @@ router.post('/register', register);
 router.post('/login', login);
 router.post('/verify-otp', verifyOTP);
 router.post('/resend-otp', resendOTP);
-router.post('/select-role', selectRole);
 router.post('/refresh', refreshToken);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 
 // Protected routes
+router.post('/select-role', protect, selectRole);
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.post('/change-password', protect, changePassword);
