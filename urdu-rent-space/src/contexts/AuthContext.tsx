@@ -37,13 +37,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
+// Render's free tier sleeps after inactivity and can take up to ~60s to wake on
+// the next request, so requests need a generous timeout instead of hanging forever.
+const FETCH_TIMEOUT_MS = 60000;
+
+const fetchWithTimeout = async (url: string, options: RequestInit = {}) => {
+  try {
+    return await fetch(url, { ...options, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error('The server is taking too long to respond. It may be waking up from sleep — please try again in a moment.');
+    }
+    throw error;
+  }
+};
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/me`, {
+      const response = await fetchWithTimeout(`${API_URL}/auth/me`, {
         credentials: 'include', // Send cookies with request
       });
       if (response.ok) {
@@ -67,7 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const response = await fetchWithTimeout(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include', // Important: receive and store cookies
@@ -85,7 +100,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const register = async (registerData: RegisterData) => {
-    const response = await fetch(`${API_URL}/auth/register`, {
+    const response = await fetchWithTimeout(`${API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -105,7 +120,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const verifyOTP = async (userId: string, otp: string, type: 'email' | 'phone') => {
-    const response = await fetch(`${API_URL}/auth/verify-otp`, {
+    const response = await fetchWithTimeout(`${API_URL}/auth/verify-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -125,7 +140,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const resendOTP = async (userId: string, type: 'email' | 'phone') => {
-    const response = await fetch(`${API_URL}/auth/resend-otp`, {
+    const response = await fetchWithTimeout(`${API_URL}/auth/resend-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -141,7 +156,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
-      await fetch(`${API_URL}/auth/logout`, {
+      await fetchWithTimeout(`${API_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
