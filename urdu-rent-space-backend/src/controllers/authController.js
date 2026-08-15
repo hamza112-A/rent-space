@@ -165,7 +165,7 @@ const login = asyncHandler(async (req, res, next) => {
     expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/'
   };
 
@@ -173,7 +173,7 @@ const login = asyncHandler(async (req, res, next) => {
     expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/'
   };
 
@@ -284,7 +284,7 @@ const verifyOTP = asyncHandler(async (req, res, next) => {
     expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/'
   };
 
@@ -292,7 +292,7 @@ const verifyOTP = asyncHandler(async (req, res, next) => {
     expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     httpOnly: true,
     secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/'
   };
 
@@ -467,7 +467,7 @@ const refreshToken = asyncHandler(async (req, res, next) => {
       expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       httpOnly: true,
       secure: isProduction,
-      sameSite: isProduction ? 'strict' : 'lax',
+      sameSite: isProduction ? 'none' : 'lax',
       path: '/'
     };
 
@@ -502,9 +502,12 @@ const logout = asyncHandler(async (req, res, next) => {
   }
 
   // Clear both cookies
+  const isProduction = process.env.NODE_ENV === 'production';
   const cookieOptions = {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/'
   };
 
@@ -733,9 +736,12 @@ const deleteAccount = asyncHandler(async (req, res, next) => {
   await User.findByIdAndDelete(req.user.id);
 
   // Clear cookies
+  const isProduction = process.env.NODE_ENV === 'production';
   const cookieOptions = {
     expires: new Date(Date.now() + 10 * 1000),
     httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/'
   };
 
