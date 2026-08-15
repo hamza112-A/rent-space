@@ -1,0 +1,17 @@
+name: Keep Backend Alive
+
+on:
+  schedule:
+    # Every 10 minutes — Render's free tier spins down after ~15 min idle
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: |
+          curl -fsS --max-time 90 "${BACKEND_URL}/health" || echo "Ping failed (backend may be cold-starting)"
+        env:
+          BACKEND_URL: https://rent-space-1v6n.onrender.com
