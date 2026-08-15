@@ -1,18 +1,18 @@
 const mongoose = require('mongoose');
 
-const connectDB = async () => {
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 5000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const connectDB = async (attempt = 1) => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
     });
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-
-    // Handle connection events
-    mongoose.connection.on('connected', () => {
-      console.log('📡 Mongoose connected to MongoDB');
-    });
 
     mongoose.connection.on('error', (err) => {
       console.error('❌ Mongoose connection error:', err);
@@ -30,8 +30,18 @@ const connectDB = async () => {
     });
 
   } catch (error) {
-    console.error('❌ Database connection failed:', error.message);
-    process.exit(1);
+    console.error(`❌ Database connection failed (attempt ${attempt}/${MAX_RETRIES}):`, error.message);
+
+    if (attempt >= MAX_RETRIES) {
+      console.error('❌ Giving up after max retries. Exiting so the process can be restarted.');
+      process.exit(1);
+    }
+
+    // Transient DNS/network issues (e.g. SRV/TXT lookup timeouts) are common on
+    // cold starts in some hosting environments — retry with a fixed backoff
+    // instead of crashing the whole server on the first hiccup.
+    await sleep(RETRY_DELAY_MS);
+    return connectDB(attempt + 1);
   }
 };
 

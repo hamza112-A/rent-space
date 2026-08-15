@@ -5,6 +5,10 @@ const User = require('../models/User');
 const Listing = require('../models/Listing');
 const Booking = require('../models/Booking');
 const Payment = require('../models/Payment');
+const Review = require('../models/Review');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
+const Dispute = require('../models/Dispute');
 const asyncHandler = require('../middleware/asyncHandler');
 const { escapeRegex } = require('../utils/validation');
 
@@ -100,8 +104,24 @@ router.delete('/users/:id', asyncHandler(async (req, res) => {
   if (req.params.id === req.user.id) return res.status(400).json({ success: false, message: 'Cannot delete your own account' });
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+  const listingIds = (await Listing.find({ owner: user._id }).select('_id')).map(l => l._id);
+  const bookingIds = (await Booking.find({ $or: [{ renter: user._id }, { owner: user._id }, { listing: { $in: listingIds } }] }).select('_id')).map(b => b._id);
+  const conversationIds = (await Conversation.find({ $or: [{ participants: user._id }, { listing: { $in: listingIds } }] }).select('_id')).map(c => c._id);
+
+  // Delete records that reference the user, their listings, their bookings, or their conversations
+  await Promise.all([
+    Message.deleteMany({ $or: [{ sender: user._id }, { conversation: { $in: conversationIds } }] }),
+    Review.deleteMany({ $or: [{ reviewerId: user._id }, { revieweeId: user._id }, { listingId: { $in: listingIds } }, { bookingId: { $in: bookingIds } }] }),
+    Dispute.deleteMany({ $or: [{ complainant: user._id }, { respondent: user._id }, { booking: { $in: bookingIds } }, { listing: { $in: listingIds } }] }),
+    Payment.deleteMany({ $or: [{ payer: user._id }, { payee: user._id }, { booking: { $in: bookingIds } }, { listing: { $in: listingIds } }] })
+  ]);
+
+  await Conversation.deleteMany({ _id: { $in: conversationIds } });
+  await Booking.deleteMany({ _id: { $in: bookingIds } });
   await Listing.deleteMany({ owner: user._id });
   await User.findByIdAndDelete(req.params.id);
+
   res.json({ success: true, message: 'User and associated data deleted successfully' });
 }));
 
