@@ -1,12 +1,11 @@
 name: Build and Push Docker Images
 
 on:
-  push:
-    branches: [main, develop]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [main]
+  # Deploys currently go through Vercel (frontend) and Render (backend) directly,
+  # not this Docker Hub/Kubernetes pipeline. Disabled from auto-running since the
+  # required DOCKER_USERNAME/DOCKER_PASSWORD secrets aren't configured, causing it
+  # to fail on every push. Trigger manually via workflow_dispatch if needed.
+  workflow_dispatch: {}
 
 env:
   REGISTRY: docker.io
