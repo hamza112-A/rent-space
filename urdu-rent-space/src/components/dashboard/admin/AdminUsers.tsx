@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Search, MoreHorizontal, Ban, CheckCircle, ShieldCheck, Trash2, AlertTriangle, Shield } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -22,12 +23,21 @@ interface User {
   role: string;
   status: string;
   isAdmin: boolean;
+  adminRole?: 'none' | 'support' | 'finance' | 'superadmin';
   verification: { email: { verified: boolean }; phone: { verified: boolean } };
   createdAt: string;
 }
 
+const ADMIN_ROLE_LABELS: Record<string, string> = {
+  none: 'Not an admin',
+  support: 'Support (moderation, no financials)',
+  finance: 'Finance (payouts, revenue)',
+  superadmin: 'Super Admin (full access)',
+};
+
 const AdminUsers: React.FC = () => {
   const { t } = useLanguage();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,7 +46,7 @@ const AdminUsers: React.FC = () => {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [actionDialog, setActionDialog] = useState<{ open: boolean; type: string; user: User | null }>({ open: false, type: '', user: null });
-  const [actionData, setActionData] = useState({ status: '', reason: '', isAdmin: false, verifyType: '' });
+  const [actionData, setActionData] = useState({ status: '', reason: '', adminRole: 'none' as 'none' | 'support' | 'finance' | 'superadmin', verifyType: '' });
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => { fetchUsers(); }, [page, statusFilter, roleFilter]);
@@ -65,8 +75,8 @@ const AdminUsers: React.FC = () => {
         await adminApi.updateUserStatus(userId, { status: actionData.status, reason: actionData.reason });
         toast.success(`User ${actionData.status} successfully`);
       } else if (actionDialog.type === 'role') {
-        await adminApi.updateUserRole(userId, actionData.isAdmin);
-        toast.success('User role updated');
+        await adminApi.setAdminRole(userId, actionData.adminRole);
+        toast.success('Admin role updated');
       } else if (actionDialog.type === 'verify') {
         await adminApi.verifyUser(userId, actionData.verifyType);
         toast.success(`${actionData.verifyType} verified`);
@@ -82,7 +92,7 @@ const AdminUsers: React.FC = () => {
 
   const openDialog = (type: string, user: User) => {
     setActionDialog({ open: true, type, user });
-    if (type === 'role') setActionData(prev => ({ ...prev, isAdmin: user.isAdmin }));
+    if (type === 'role') setActionData(prev => ({ ...prev, adminRole: user.adminRole || 'none' }));
   };
 
   const getStatusColor = (status: string) => {
@@ -144,7 +154,9 @@ const AdminUsers: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-medium">{user.fullName}</p>
-                        {user.isAdmin && <Badge className="bg-purple-500/10 text-purple-600"><Shield className="h-3 w-3 mr-1" />Admin</Badge>}
+                        {user.adminRole && user.adminRole !== 'none' && (
+                          <Badge className="bg-purple-500/10 text-purple-600 capitalize"><Shield className="h-3 w-3 mr-1" />{user.adminRole}</Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground">{user.email}</p>
                       <div className="flex items-center gap-2 mt-1">
@@ -159,7 +171,9 @@ const AdminUsers: React.FC = () => {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => openDialog('status', user)}><Ban className="h-4 w-4 mr-2" />{t.common.edit}</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => openDialog('verify', user)}><CheckCircle className="h-4 w-4 mr-2" />{t.verification.verify}</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openDialog('role', user)}><ShieldCheck className="h-4 w-4 mr-2" />{t.auth.selectRole}</DropdownMenuItem>
+                      {currentUser?.isSuperAdmin && (
+                        <DropdownMenuItem onClick={() => openDialog('role', user)}><ShieldCheck className="h-4 w-4 mr-2" />Set Admin Role</DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={() => openDialog('delete', user)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />{t.common.delete}</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -209,14 +223,18 @@ const AdminUsers: React.FC = () => {
               </>
             )}
             {actionDialog.type === 'role' && (
-              <div><Label>{t.auth.selectRole}</Label>
-                <Select value={actionData.isAdmin ? 'true' : 'false'} onValueChange={(v) => setActionData(p => ({ ...p, isAdmin: v === 'true' }))}>
+              <div><Label>Admin Role</Label>
+                <Select value={actionData.adminRole} onValueChange={(v: 'none' | 'support' | 'finance' | 'superadmin') => setActionData(p => ({ ...p, adminRole: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="false">{t.auth.borrower}</SelectItem>
-                    <SelectItem value="true">{t.admin.title}</SelectItem>
+                    {Object.entries(ADMIN_ROLE_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Support: verifications, disputes, listings, users, reports. Finance: payouts and revenue analytics. Super Admin: everything, including managing other admins.
+                </p>
               </div>
             )}
             {actionDialog.type === 'verify' && (

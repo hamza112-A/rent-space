@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import Layout from '@/components/layout/Layout';
@@ -22,7 +22,11 @@ import {
   TrendingUp,
   Tag,
   MessageSquare,
-  AlertTriangle
+  AlertTriangle,
+  UserSquare2,
+  Store,
+  Flag,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -34,6 +38,8 @@ import AccountSettings from '@/components/dashboard/AccountSettings';
 import DashboardOverview from '@/components/dashboard/DashboardOverview';
 import Messages from '@/components/dashboard/Messages';
 import Disputes from '@/components/dashboard/Disputes';
+import Team from '@/components/dashboard/Team';
+import StorefrontSettings from '@/components/dashboard/StorefrontSettings';
 // Admin components
 import AdminDashboard from '@/components/dashboard/admin/AdminDashboard';
 import AdminUsers from '@/components/dashboard/admin/AdminUsers';
@@ -43,11 +49,17 @@ import AdminBookings from '@/components/dashboard/admin/AdminBookings';
 import AdminAnalytics from '@/components/dashboard/admin/AdminAnalytics';
 import AdminCategories from '@/components/dashboard/admin/AdminCategories';
 import AdminDisputes from '@/components/dashboard/admin/AdminDisputes';
+import AdminPayouts from '@/components/dashboard/admin/AdminPayouts';
+import AdminReports from '@/components/dashboard/admin/AdminReports';
+import AdminAuditLog from '@/components/dashboard/admin/AdminAuditLog';
 
 const Dashboard: React.FC = () => {
   const { t, isRTL } = useLanguage();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams] = useSearchParams();
+  // Supports deep-linking into a tab (e.g. `/dashboard?tab=earnings`), used by
+  // the Stripe Connect onboarding return redirect.
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Check user role
@@ -62,22 +74,35 @@ const Dashboard: React.FC = () => {
     { id: 'messages', label: t.dashboard.messages, icon: MessageSquare, roles: ['owner', 'borrower', 'both'] },
     { id: 'disputes', label: 'Disputes', icon: AlertTriangle, roles: ['owner', 'borrower', 'both'] },
     { id: 'earnings', label: t.dashboard.earnings, icon: DollarSign, roles: ['owner', 'both'] },
+    { id: 'team', label: 'Team', icon: UserSquare2, roles: ['owner', 'both'] },
+    { id: 'storefront', label: 'Storefront', icon: Store, roles: ['owner', 'both'] },
     { id: 'verification', label: t.dashboard.verification, icon: Shield, roles: ['owner', 'borrower', 'both'] },
     { id: 'settings', label: t.dashboard.settings, icon: Settings, roles: ['owner', 'borrower', 'both'] },
   ].filter(tab => tab.roles.includes(user?.role || 'borrower'));
 
-  const adminTabs = [
-    { id: 'admin-dashboard', label: t.admin?.dashboard || 'Admin Dashboard', icon: BarChart3 },
-    { id: 'admin-users', label: t.admin?.users || 'User Management', icon: Users },
-    { id: 'admin-listings', label: t.admin?.listings || 'Listing Management', icon: Building2 },
-    { id: 'admin-verifications', label: t.admin?.verifications || 'Verifications', icon: CheckCircle },
-    { id: 'admin-bookings', label: t.admin?.bookings || 'All Bookings', icon: CalendarDays },
-    { id: 'admin-disputes', label: 'Dispute Management', icon: AlertTriangle },
-    { id: 'admin-analytics', label: t.dashboard.analytics, icon: TrendingUp },
-    { id: 'admin-categories', label: t.admin?.categories || 'Categories', icon: Tag },
+  // Which granular admin role(s) can see each admin tab — see
+  // docs/redesign/11-admin-panel.md. 'superadmin' can always see everything
+  // regardless of what's listed here (filtered below).
+  const adminTabsAll = [
+    { id: 'admin-dashboard', label: t.admin?.dashboard || 'Admin Dashboard', icon: BarChart3, adminRoles: ['support', 'finance'] },
+    { id: 'admin-users', label: t.admin?.users || 'User Management', icon: Users, adminRoles: ['support'] },
+    { id: 'admin-listings', label: t.admin?.listings || 'Listing Management', icon: Building2, adminRoles: ['support'] },
+    { id: 'admin-verifications', label: t.admin?.verifications || 'Verifications', icon: CheckCircle, adminRoles: ['support'] },
+    { id: 'admin-bookings', label: t.admin?.bookings || 'All Bookings', icon: CalendarDays, adminRoles: ['support'] },
+    { id: 'admin-disputes', label: 'Dispute Management', icon: AlertTriangle, adminRoles: ['support'] },
+    { id: 'admin-payouts', label: 'Payout Oversight', icon: DollarSign, adminRoles: ['finance'] },
+    { id: 'admin-reports', label: 'Report Queue', icon: Flag, adminRoles: ['support'] },
+    { id: 'admin-analytics', label: t.dashboard.analytics, icon: TrendingUp, adminRoles: ['support', 'finance'] },
+    { id: 'admin-categories', label: t.admin?.categories || 'Categories', icon: Tag, adminRoles: [] },
+    { id: 'admin-audit-log', label: 'Audit Log', icon: ClipboardList, adminRoles: [] },
   ];
 
-  const tabs = user?.isSuperAdmin ? [...baseTabs, ...adminTabs] : baseTabs;
+  const isAnyAdmin = user?.isSuperAdmin || (!!user?.adminRole && user.adminRole !== 'none');
+  const adminTabs = adminTabsAll.filter(
+    (tab) => user?.isSuperAdmin || (user?.adminRole && tab.adminRoles.includes(user.adminRole))
+  );
+
+  const tabs = isAnyAdmin ? [...baseTabs, ...adminTabs] : baseTabs;
 
   const SidebarContent = () => (
     <nav className="space-y-1">
@@ -103,11 +128,13 @@ const Dashboard: React.FC = () => {
         );
       })}
 
-      {/* Super Admin Section */}
-      {user?.isSuperAdmin && (
+      {/* Admin Section */}
+      {isAnyAdmin && (
         <>
           <div className="mt-6 pt-6 border-t border-border">
-            <p className="px-4 py-2 text-xs font-semibold text-purple-600 uppercase tracking-wider">{t.admin?.title || 'Super Admin'}</p>
+            <p className="px-4 py-2 text-xs font-semibold text-purple-600 uppercase tracking-wider">
+              {user?.isSuperAdmin ? (t.admin?.title || 'Super Admin') : `Admin (${user?.adminRole})`}
+            </p>
           </div>
           {adminTabs.map((tab) => {
             const Icon = tab.icon;
@@ -187,16 +214,18 @@ const Dashboard: React.FC = () => {
           {/* Main Content */}
           <main className="flex-1 p-4 lg:p-8 mt-14 lg:mt-0">
             <div className="max-w-6xl mx-auto">
-              {activeTab === 'overview' && <DashboardOverview />}
+              {activeTab === 'overview' && <DashboardOverview onNavigateTab={setActiveTab} />}
               {activeTab === 'listings' && isOwner && <MyListings />}
-              {activeTab === 'bookings' && <MyBookings />}
-              {activeTab === 'messages' && <Messages />}
+              {activeTab === 'bookings' && <MyBookings onNavigateTab={setActiveTab} />}
+              {activeTab === 'messages' && <Messages onNavigateTab={setActiveTab} />}
               {activeTab === 'disputes' && <Disputes />}
               {activeTab === 'earnings' && isOwner && <Earnings />}
+              {activeTab === 'team' && isOwner && <Team />}
+              {activeTab === 'storefront' && isOwner && <StorefrontSettings />}
               {activeTab === 'verification' && <Verification />}
               {activeTab === 'settings' && <AccountSettings />}
-              {/* Admin tabs - only rendered for super admins */}
-              {user?.isSuperAdmin && (
+              {/* Admin tabs - only rendered for a role that's allowed to see them */}
+              {isAnyAdmin && adminTabs.some((t) => t.id === activeTab) && (
                 <>
                   {activeTab === 'admin-dashboard' && <AdminDashboard />}
                   {activeTab === 'admin-users' && <AdminUsers />}
@@ -204,8 +233,11 @@ const Dashboard: React.FC = () => {
                   {activeTab === 'admin-verifications' && <AdminVerifications />}
                   {activeTab === 'admin-bookings' && <AdminBookings />}
                   {activeTab === 'admin-disputes' && <AdminDisputes />}
+                  {activeTab === 'admin-payouts' && <AdminPayouts />}
+                  {activeTab === 'admin-reports' && <AdminReports />}
                   {activeTab === 'admin-analytics' && <AdminAnalytics />}
                   {activeTab === 'admin-categories' && <AdminCategories />}
+                  {activeTab === 'admin-audit-log' && <AdminAuditLog />}
                 </>
               )}
             </div>

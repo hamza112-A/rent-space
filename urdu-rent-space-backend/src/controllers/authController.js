@@ -144,6 +144,14 @@ const login = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Invalid credentials', 401));
   }
 
+  // A correct-password login on a self-deactivated account reactivates it —
+  // see deactivateAccount() and docs/redesign/10-settings.md.
+  let reactivated = false;
+  if (user.status === 'deactivated') {
+    user.status = 'active';
+    reactivated = true;
+  }
+
   // Reset login attempts on successful login
   if (user.loginAttempts > 0) {
     await user.resetLoginAttempts();
@@ -185,6 +193,7 @@ const login = asyncHandler(async (req, res, next) => {
     success: true,
     data: {
       expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
+      reactivated,
       user: {
         _id: user._id,
         fullName: user.fullName,
@@ -196,6 +205,9 @@ const login = asyncHandler(async (req, res, next) => {
         isEmailVerified: user.verification?.email?.verified || false,
         isPhoneVerified: user.verification?.phone?.verified || false,
         isVerified: user.isFullyVerified,
+        isAdmin: user.isAdmin || false,
+        isSuperAdmin: user.isSuperAdmin || false,
+        adminRole: user.adminRole || 'none',
         subscription: user.subscription
       }
     }
@@ -655,6 +667,7 @@ const getMe = asyncHandler(async (req, res, next) => {
     isIdentityVerified: user.verification?.identity?.verified || false,
     isAdmin: user.isAdmin || false,
     isSuperAdmin: user.isSuperAdmin || false,
+    adminRole: user.adminRole || 'none',
     verification: user.verification,
     subscription: user.subscription,
     stats: user.stats,
@@ -753,6 +766,49 @@ const deleteAccount = asyncHandler(async (req, res, next) => {
     data: {
       message: 'Account deleted successfully'
     }
+  });
+});
+
+// @desc    Deactivate account (reversible — distinct from delete). Logging
+//          back in reactivates it automatically, see login() below. See
+//          docs/redesign/10-settings.md.
+// @route   POST /api/v1/auth/deactivate-account
+// @access  Private
+const deactivateAccount = asyncHandler(async (req, res, next) => {
+  const { password } = req.body;
+
+  if (!password) {
+    return next(new ErrorResponse('Password is required to deactivate account', 400));
+  }
+
+  const user = await User.findById(req.user.id).select('+password');
+
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  const isMatch = await user.matchPassword(password);
+  if (!isMatch) {
+    return next(new ErrorResponse('Password is incorrect', 401));
+  }
+
+  user.status = 'deactivated';
+  await user.save({ validateBeforeSave: false });
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  const cookieOptions = {
+    expires: new Date(Date.now() + 10 * 1000),
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/'
+  };
+  res.cookie('accessToken', 'none', cookieOptions);
+  res.cookie('refreshToken', 'none', cookieOptions);
+
+  res.status(200).json({
+    success: true,
+    data: { message: 'Account deactivated. Log back in any time to reactivate it.' }
   });
 });
 
@@ -994,6 +1050,7 @@ module.exports = {
   getMe,
   changePassword,
   deleteAccount,
+  deactivateAccount,
   setup2FA,
   verify2FA,
   disable2FA,

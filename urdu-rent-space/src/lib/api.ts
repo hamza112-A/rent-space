@@ -94,6 +94,8 @@ export const authApi = {
     api.post('/auth/change-password', data),
   deleteAccount: (password: string) =>
     api.delete('/auth/delete-account', { data: { password } }),
+  deactivateAccount: (password: string) =>
+    api.post('/auth/deactivate-account', { password }),
   // 2FA
   get2FAStatus: () => api.get('/auth/2fa/status'),
   setup2FA: () => api.post('/auth/2fa/setup'),
@@ -126,6 +128,7 @@ export const userApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   getUserStats: () => api.get('/users/stats'),
+  getDashboardOverview: () => api.get('/users/dashboard-overview'),
   getPublicProfile: (userId: string) => api.get(`/users/${userId}`),
   getReviews: (userId: string, params?: { page?: number; limit?: number }) =>
     api.get(`/users/${userId}/reviews`, { params }),
@@ -185,10 +188,20 @@ export const listingApi = {
   toggleFavorite: (listingId: string) => api.post(`/listings/${listingId}/favorite`),
   getFavorites: (params?: { page?: number; limit?: number }) =>
     api.get('/listings/favorites', { params }),
+  renew: (listingId: string) => api.put(`/listings/${listingId}/renew`),
   report: (listingId: string, data: { reason: string; description: string }) =>
     api.post(`/listings/${listingId}/report`, data),
   getReviews: (listingId: string, params?: { page?: number; limit?: number; sort?: string }) =>
     api.get(`/listings/${listingId}/reviews`, { params }),
+  featureWithCredit: (listingId: string) => api.post(`/listings/${listingId}/feature/use-credit`),
+  featureCreatePayment: (listingId: string) => api.post(`/listings/${listingId}/feature/create-payment`),
+  featureConfirm: (listingId: string, data: { paymentIntentId: string }) =>
+    api.post(`/listings/${listingId}/feature/confirm`, data),
+  // Business-tier bulk listing import
+  getBulkUploadTemplate: () => api.get('/listings/bulk-upload/template', { responseType: 'blob' }),
+  bulkUpload: (data: FormData) => api.post('/listings/bulk-upload', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 // Bookings API
@@ -221,11 +234,6 @@ export const paymentApi = {
     api.post('/payments/confirm', data),
   getStatus: (paymentIntentId: string) =>
     api.get(`/payments/status/${paymentIntentId}`),
-  initiate: (data: {
-    bookingId: string;
-    method: 'jazzcash' | 'easypaisa' | 'card' | 'bank';
-    returnUrl?: string;
-  }) => api.post('/payments/initiate', data),
   verify: (paymentId: string) => api.get(`/payments/${paymentId}/verify`),
   getHistory: (params?: { page?: number; limit?: number }) =>
     api.get('/payments/history', { params }),
@@ -234,6 +242,32 @@ export const paymentApi = {
     api.post('/payments/methods', data),
   deleteMethod: (methodId: string) => api.delete(`/payments/methods/${methodId}`),
   setDefaultMethod: (methodId: string) => api.put(`/payments/methods/${methodId}/default`),
+};
+
+// Earnings & Payouts API (owner only)
+export const earningsApi = {
+  getSummary: (period?: 'week' | 'month' | 'year' | 'all') =>
+    api.get('/earnings/summary', { params: { period } }),
+  getTransactions: (params?: { page?: number; limit?: number }) =>
+    api.get('/earnings/transactions', { params }),
+  requestPayout: (method: 'stripe' | 'bank_transfer' | 'jazzcash' | 'easypaisa') =>
+    api.post('/earnings/payout', { method }),
+  getPayoutMethods: () => api.get('/earnings/payout-methods'),
+  addPayoutMethod: (data: {
+    type: 'bank_transfer' | 'jazzcash' | 'easypaisa';
+    details: {
+      mobileNumber?: string;
+      accountTitle?: string;
+      bankName?: string;
+      accountNumber?: string;
+      branchCode?: string;
+    };
+    isDefault?: boolean;
+  }) => api.post('/earnings/payout-methods', data),
+  deletePayoutMethod: (methodId: string) => api.delete(`/earnings/payout-methods/${methodId}`),
+  getConnectStatus: () => api.get('/earnings/connect/status'),
+  startConnectOnboarding: () => api.post('/earnings/connect/onboard'),
+  syncConnectStatus: () => api.post('/earnings/connect/sync'),
 };
 
 // Subscription API
@@ -249,6 +283,30 @@ export const subscriptionApi = {
   sync: () => api.post('/subscriptions/sync'),
 };
 
+// Organizations API (Business-tier multi-user team accounts)
+export const organizationApi = {
+  getMine: () => api.get('/organizations/me'),
+  addMember: (email: string) => api.post('/organizations/members', { email }),
+  updateMemberRole: (userId: string, role: 'admin' | 'staff') =>
+    api.put(`/organizations/members/${userId}`, { role }),
+  removeMember: (userId: string) => api.delete(`/organizations/members/${userId}`),
+};
+
+// Storefront API (Pro/Business brand pages)
+export const storefrontApi = {
+  getSettings: () => api.get('/storefront/me/settings'),
+  update: (data: {
+    slug?: string;
+    name?: string;
+    tagline?: string;
+    description?: string;
+    logoUrl?: string;
+    bannerUrl?: string;
+    enabled?: boolean;
+  }) => api.put('/storefront', data),
+  getPublic: (slug: string) => api.get(`/storefront/${slug}`),
+};
+
 // Messages API
 export const messageApi = {
   getConversations: (params?: { page?: number; limit?: number }) =>
@@ -259,8 +317,20 @@ export const messageApi = {
     api.post('/messages', data),
   sendMessage: (conversationId: string, data: { content: string }) =>
     api.post(`/messages/${conversationId}/messages`, data),
+  sendAttachment: (conversationId: string, data: FormData) =>
+    api.post(`/messages/${conversationId}/messages`, data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   markAsRead: (conversationId: string) =>
     api.post(`/messages/${conversationId}/read`),
+};
+
+// Marketplace safety controls (block/report a user) — see
+// docs/redesign/06-messages.md.
+export const safetyApi = {
+  toggleBlock: (userId: string) => api.post(`/users/${userId}/block`),
+  reportUser: (userId: string, data: { reason: string; description?: string; conversationId?: string }) =>
+    api.post(`/users/${userId}/report`, data),
 };
 
 // Admin API (Super Admin only)
@@ -278,6 +348,8 @@ export const adminApi = {
     api.put(`/admin/users/${userId}/verify`, { type }),
   updateUserRole: (userId: string, isAdmin: boolean) =>
     api.put(`/admin/users/${userId}/role`, { isAdmin }),
+  setAdminRole: (userId: string, adminRole: 'none' | 'support' | 'finance' | 'superadmin') =>
+    api.put(`/admin/users/${userId}/admin-role`, { adminRole }),
   deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
   
   // Listing Management
@@ -302,7 +374,23 @@ export const adminApi = {
   // Booking Management
   getBookings: (params?: { page?: number; limit?: number; status?: string }) =>
     api.get('/admin/bookings', { params }),
-  
+
+  // Payout Oversight
+  getPayouts: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/admin/payouts', { params }),
+  markPayoutPaid: (payoutId: string) => api.put(`/admin/payouts/${payoutId}/mark-paid`),
+  markPayoutFailed: (payoutId: string, reason?: string) =>
+    api.put(`/admin/payouts/${payoutId}/mark-failed`, { reason }),
+
+  // Report / Abuse Queue
+  getReports: () => api.get('/admin/reports'),
+  dismissReport: (userId: string, reportId: string) =>
+    api.put(`/admin/reports/${userId}/${reportId}/dismiss`),
+
+  // Audit Log
+  getAuditLog: (params?: { page?: number; limit?: number; admin?: string; targetType?: string }) =>
+    api.get('/admin/audit-log', { params }),
+
   // Analytics
   getRevenueAnalytics: (period?: number) =>
     api.get('/admin/analytics/revenue', { params: { period } }),

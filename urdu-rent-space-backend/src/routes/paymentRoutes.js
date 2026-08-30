@@ -184,6 +184,7 @@ router.post('/create-intent', protect, asyncHandler(async (req, res) => {
     amount: {
       subtotal: booking.pricing?.subtotal ?? amount,
       serviceFee: booking.pricing?.serviceFee ?? 0,
+      commission: booking.pricing?.commission ?? 0,
       total: amount,
       currency: chargeCurrency.toUpperCase()
     },
@@ -225,12 +226,15 @@ router.post('/confirm', protect, asyncHandler(async (req, res) => {
     payment.completedAt = new Date();
     payment.transactionId = paymentIntent.id;
     
-    // Set payout info for owner earnings
+    // Set payout info for owner earnings. The owner is owed the subtotal
+    // minus the platform's tiered commission — amount.total also includes
+    // the borrower's service fee, which the owner never sees. See
+    // Payment.ownerEarnings.
     payment.payout = {
-      amount: payment.amount.total,
+      amount: payment.ownerEarnings,
       status: 'pending'
     };
-    
+
     await payment.save();
 
     // Update booking status if linked
@@ -320,25 +324,6 @@ router.get('/:id', protect, asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, data: payment });
-}));
-
-// @route   POST /api/v1/payments/initiate (Legacy - kept for compatibility)
-router.post('/initiate', protect, asyncHandler(async (req, res) => {
-  const { bookingId, method, amount } = req.body;
-
-  const payment = await Payment.create({
-    booking: bookingId,
-    payer: req.user._id,
-    method,
-    status: 'pending',
-    amount: { total: amount, currency: 'PKR' }
-  });
-
-  res.status(201).json({
-    success: true,
-    data: payment,
-    message: 'Payment initiated. Complete payment to confirm booking.'
-  });
 }));
 
 // Note: the Stripe webhook handler lives in server.js, registered before the

@@ -70,6 +70,19 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Granular admin role (see docs/redesign/11-admin-panel.md) — source of
+  // truth for what an admin can do; isAdmin/isSuperAdmin above are kept in
+  // sync (via pre-save hook below) purely for existing code that checks
+  // those booleans directly, so neither needs a wholesale rewrite.
+  // 'support': verifications, disputes, listings moderation, reports — no
+  //   financial actions.
+  // 'finance': payouts and revenue analytics — not user/listing moderation.
+  // 'superadmin': everything, including managing other admins' roles.
+  adminRole: {
+    type: String,
+    enum: ['none', 'support', 'finance', 'superadmin'],
+    default: 'none'
+  },
 
   // Verification Status
   verification: {
@@ -143,11 +156,31 @@ const userSchema = new mongoose.Schema({
     }
   },
 
+  favorites: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Listing'
+  }],
+
+  // Basic marketplace-safety controls, surfaced from the Messages tab — see
+  // docs/redesign/06-messages.md.
+  blockedUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  reports: [{
+    reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reason: String,
+    description: String,
+    conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation' },
+    dismissed: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  }],
+
   // Subscription Information
   subscription: {
     plan: {
       type: String,
-      enum: ['free', 'basic', 'premium'],
+      enum: ['free', 'plus', 'pro', 'business'],
       default: 'free'
     },
     status: {
@@ -160,15 +193,49 @@ const userSchema = new mongoose.Schema({
     autoRenew: { type: Boolean, default: false },
     paymentMethod: String,
     // Plan limits
-    maxListings: { type: Number, default: 5 },
-    listingDuration: { type: Number, default: 48 }, // hours for free, 720 (30 days) for basic, unlimited for premium
+    maxListings: { type: Number, default: 3 },
+    listingDuration: { type: Number, default: 720 }, // hours; see config/subscriptionPlans.js for per-tier values
+    // Commission the platform takes on this owner's completed bookings —
+    // the primary upgrade lever, see docs/redesign/01-business-model.md.
+    // Kept on the user (not looked up live from the plan) so a booking's
+    // rate is locked to whatever the owner's tier was when it was made.
+    commissionRate: { type: Number, default: 0.10 },
+    featuredCredits: {
+      total: { type: Number, default: 0 },
+      used: { type: Number, default: 0 },
+      resetAt: Date
+    },
     features: {
       prioritySupport: { type: Boolean, default: false },
       enhancedVisibility: { type: Boolean, default: false },
       analytics: { type: Boolean, default: false },
       featuredBadge: { type: Boolean, default: false },
-      topVisibility: { type: Boolean, default: false }
+      topVisibility: { type: Boolean, default: false },
+      storefront: { type: Boolean, default: false },
+      teamAccounts: { type: Boolean, default: false }
     }
+  },
+
+  // Business-tier multi-user team membership. Set on the billing owner too
+  // (role: 'owner') so any user with `organization.id` can be resolved to
+  // the same shared listing pool — see models/Organization.js and
+  // docs/redesign/02-subscription-tiers.md.
+  organization: {
+    id: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization' },
+    role: { type: String, enum: ['owner', 'admin', 'staff'] }
+  },
+
+  // Pro/Business storefront/brand page — a public profile grouping an
+  // owner's listings under one branded page. Gated on
+  // subscription.features.storefront; see docs/redesign/02-subscription-tiers.md.
+  storefront: {
+    enabled: { type: Boolean, default: false },
+    slug: { type: String, lowercase: true, trim: true },
+    name: { type: String, trim: true, maxlength: 100 },
+    tagline: { type: String, trim: true, maxlength: 200 },
+    description: { type: String, trim: true, maxlength: 1000 },
+    logoUrl: String,
+    bannerUrl: String
   },
 
   // Payment Methods
@@ -196,6 +263,42 @@ const userSchema = new mongoose.Schema({
     isDefault: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
   }],
+
+  // Payout Methods — where an owner's earnings are sent. Kept separate from
+  // paymentMethods above: that's how a user pays as a borrower, this is how
+  // they get paid as an owner, and the two shouldn't be conflated.
+  payoutMethods: [{
+    type: {
+      type: String,
+      enum: ['bank_transfer', 'jazzcash', 'easypaisa'],
+      required: true
+    },
+    details: {
+      // For mobile wallets (JazzCash, Easypaisa)
+      mobileNumber: String,
+      accountTitle: String,
+      // For bank accounts
+      bankName: String,
+      accountNumber: String, // Masked: ****1234
+      branchCode: String
+    },
+    isDefault: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  }],
+
+  // Stripe Connect (Express) account for automated payouts. Note: Pakistan is
+  // not a Stripe Connect-supported country today, so in production this stays
+  // unset for PK-based owners and payoutMethods above is the real payout
+  // rail. This exists so the payout flow has a working automated path to
+  // develop/demo against in Stripe test mode.
+  stripeConnect: {
+    accountId: String,
+    country: String,
+    detailsSubmitted: { type: Boolean, default: false },
+    payoutsEnabled: { type: Boolean, default: false },
+    chargesEnabled: { type: Boolean, default: false },
+    updatedAt: Date
+  },
 
   // Statistics and Ratings
   stats: {
@@ -262,7 +365,10 @@ const userSchema = new mongoose.Schema({
   // Account Status
   status: {
     type: String,
-    enum: ['active', 'suspended', 'banned', 'deleted'],
+    // 'deactivated' is user-initiated and reversible (auto-reactivates on
+    // next successful login) — distinct from admin-initiated 'suspended'/
+    // 'banned'. See docs/redesign/10-settings.md.
+    enum: ['active', 'deactivated', 'suspended', 'banned', 'deleted'],
     default: 'active'
   },
   suspensionReason: String,
@@ -286,6 +392,7 @@ userSchema.index({ 'verification.phone.verified': 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ 'storefront.slug': 1 }, { unique: true, sparse: true });
 
 // Virtual for account lock status
 userSchema.virtual('isLocked').get(function() {
@@ -342,6 +449,21 @@ userSchema.pre('save', function(next) {
   if (!this.isModified('password') || this.isNew) return next();
   
   this.passwordChangedAt = Date.now() - 1000; // Subtract 1 second to ensure token is created after password change
+  next();
+});
+
+// Pre-save middleware to keep isAdmin/isSuperAdmin in sync with adminRole,
+// whichever side was actually changed — lets old code that only knows about
+// the booleans keep working while adminRole is the real source of truth.
+userSchema.pre('save', function(next) {
+  if (this.isModified('adminRole')) {
+    this.isSuperAdmin = this.adminRole === 'superadmin';
+    this.isAdmin = this.adminRole !== 'none';
+  } else if ((this.isModified('isAdmin') || this.isModified('isSuperAdmin')) && !this.isModified('adminRole')) {
+    if (this.isSuperAdmin) this.adminRole = 'superadmin';
+    else if (this.isAdmin) this.adminRole = this.adminRole === 'none' ? 'support' : this.adminRole;
+    else this.adminRole = 'none';
+  }
   next();
 });
 

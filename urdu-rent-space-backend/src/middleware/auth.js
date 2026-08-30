@@ -131,6 +131,27 @@ const superAdminOnly = (req, res, next) => {
   next();
 };
 
+// Grant access to specific granular admin roles (see docs/redesign/11-admin-panel.md).
+// 'superadmin' always passes, regardless of which roles are listed, since it
+// has full access by definition.
+const requireAdminRole = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return next(new ErrorResponse('Not authorized to access this route', 401));
+    }
+
+    if (req.user.adminRole === 'superadmin' || req.user.isSuperAdmin) {
+      return next();
+    }
+
+    if (!roles.includes(req.user.adminRole)) {
+      return next(new ErrorResponse('You do not have permission to access this admin area', 403));
+    }
+
+    next();
+  };
+};
+
 // Verify user owns resource or is admin
 const ownerOrAdmin = (resourceModel, resourceIdParam = 'id') => {
   return asyncHandler(async (req, res, next) => {
@@ -205,7 +226,7 @@ const requireFullVerification = (req, res, next) => {
 };
 
 // Check subscription status
-const requireSubscription = (planType = 'premium') => {
+const requireSubscription = (planType = 'pro') => {
   return (req, res, next) => {
     if (!req.user) {
       return next(new ErrorResponse('Not authorized to access this route', 401));
@@ -302,6 +323,7 @@ module.exports = {
   borrowerOnly,
   adminOnly,
   superAdminOnly,
+  requireAdminRole,
   ownerOrAdmin,
   requireEmailVerification,
   requirePhoneVerification,

@@ -12,6 +12,7 @@ const {
   getMe,
   changePassword,
   deleteAccount,
+  deactivateAccount,
   setup2FA,
   verify2FA,
   disable2FA,
@@ -37,6 +38,7 @@ router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 router.post('/change-password', protect, changePassword);
 router.delete('/delete-account', protect, deleteAccount);
+router.post('/deactivate-account', protect, deactivateAccount);
 
 // 2FA routes
 router.get('/2fa/status', protect, get2FAStatus);

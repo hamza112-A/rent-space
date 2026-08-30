@@ -44,10 +44,11 @@ import {
   Smartphone,
   Building,
   Star,
+  Crown,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { userApi, authApi, paymentApi } from '@/lib/api';
+import { userApi, authApi, paymentApi, subscriptionApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 const AccountSettings: React.FC = () => {
@@ -79,6 +80,11 @@ const AccountSettings: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+
+  // Deactivate account dialog (reversible — distinct from delete above)
+  const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
+  const [deactivatePassword, setDeactivatePassword] = useState('');
+  const [deactivatingAccount, setDeactivatingAccount] = useState(false);
 
   // Payment methods
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
@@ -118,11 +124,34 @@ const AccountSettings: React.FC = () => {
     marketing: false,
   });
 
+  // Plan & Billing summary (see docs/redesign/10-settings.md)
+  const [planInfo, setPlanInfo] = useState<{
+    plan: string;
+    listingsUsed?: number;
+    maxListings?: number | string;
+    commissionRate?: number;
+    featuredCredits?: { total: number; used: number };
+  } | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+
   useEffect(() => {
     fetchUserProfile();
     fetchPaymentMethods();
     fetch2FAStatus();
+    fetchPlanInfo();
   }, []);
+
+  const fetchPlanInfo = async () => {
+    try {
+      setPlanLoading(true);
+      const res = await subscriptionApi.getCurrentPlan();
+      setPlanInfo(res.data?.data || null);
+    } catch (err) {
+      console.error('Failed to fetch plan info:', err);
+    } finally {
+      setPlanLoading(false);
+    }
+  };
 
   const fetch2FAStatus = async () => {
     try {
@@ -293,6 +322,26 @@ const AccountSettings: React.FC = () => {
       toast.error(err.response?.data?.message || 'Failed to delete account');
     } finally {
       setDeletingAccount(false);
+    }
+  };
+
+  const handleDeactivateAccount = async () => {
+    if (!deactivatePassword) {
+      toast.error('Please enter your password');
+      return;
+    }
+
+    try {
+      setDeactivatingAccount(true);
+      await authApi.deactivateAccount(deactivatePassword);
+      toast.success('Account deactivated. Log back in any time to reactivate it.');
+      setDeactivateDialogOpen(false);
+      logout();
+      navigate('/');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to deactivate account');
+    } finally {
+      setDeactivatingAccount(false);
     }
   };
 
@@ -782,6 +831,52 @@ const AccountSettings: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Plan & Billing */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Crown className="h-5 w-5 text-amber-500" />
+            Plan & Billing
+          </CardTitle>
+          <CardDescription>Your subscription tier and usage against its limits</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {planLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : planInfo ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Badge className="bg-primary/10 text-primary border-primary/20 capitalize">{planInfo.plan}</Badge>
+                {planInfo.commissionRate != null && (
+                  <span className="text-sm text-muted-foreground">{Math.round(planInfo.commissionRate * 100)}% commission</span>
+                )}
+              </div>
+              {planInfo.maxListings != null && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Listings used</span>
+                  <span className="font-medium text-foreground">
+                    {planInfo.listingsUsed ?? 0}{planInfo.maxListings === -1 || planInfo.maxListings === 'Unlimited' ? '' : ` / ${planInfo.maxListings}`}
+                  </span>
+                </div>
+              )}
+              {planInfo.featuredCredits && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Featured credits remaining</span>
+                  <span className="font-medium text-foreground">
+                    {Math.max(0, planInfo.featuredCredits.total - planInfo.featuredCredits.used)} / {planInfo.featuredCredits.total}
+                  </span>
+                </div>
+              )}
+              <Button variant="outline" className="w-full mt-2" onClick={() => navigate('/subscription')}>
+                Manage Plan
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Unable to load plan details.</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Payment Methods */}
       <Card>
         <CardHeader>
@@ -867,6 +962,16 @@ const AccountSettings: React.FC = () => {
           <Separator />
           <div className="flex items-center justify-between">
             <div>
+              <p className="font-medium text-foreground">Deactivate Account</p>
+              <p className="text-sm text-muted-foreground">
+                Temporarily hide your profile and listings. Reversible — just log back in to reactivate.
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => setDeactivateDialogOpen(true)}>Deactivate</Button>
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
               <p className="font-medium text-foreground">Delete Account</p>
               <p className="text-sm text-muted-foreground">Permanently delete your account and all data</p>
             </div>
@@ -947,6 +1052,35 @@ const AccountSettings: React.FC = () => {
             <Button variant="outline" onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleChangePassword} disabled={changingPassword}>
               {changingPassword ? 'Changing...' : 'Change Password'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate Account Dialog */}
+      <Dialog open={deactivateDialogOpen} onOpenChange={setDeactivateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate Account</DialogTitle>
+            <DialogDescription>
+              Your profile and listings will be hidden until you log back in — nothing is deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="deactivatePassword">Enter your password to confirm</Label>
+              <Input
+                id="deactivatePassword"
+                type="password"
+                value={deactivatePassword}
+                onChange={(e) => setDeactivatePassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeactivateDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleDeactivateAccount} disabled={deactivatingAccount}>
+              {deactivatingAccount ? 'Deactivating...' : 'Deactivate Account'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -11,6 +11,7 @@ interface User {
   profileImage?: string;
   isAdmin?: boolean;
   isSuperAdmin?: boolean;
+  adminRole?: 'none' | 'support' | 'finance' | 'superadmin';
 }
 
 interface AuthContextType {
