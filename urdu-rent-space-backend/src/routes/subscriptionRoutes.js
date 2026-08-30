@@ -48,7 +48,11 @@ router.get('/current', protect, asyncHandler(async (req, res) => {
       commissionRate: planDetails.commissionRate,
       features: planDetails.features
     };
-    await user.save();
+    // findById here doesn't select +password (select:false, required:true),
+    // so a normal validated save() would throw "password is required" and
+    // 500 this read-only-looking endpoint. Only subscription fields are
+    // actually changing, so skip full-document validation.
+    await user.save({ validateBeforeSave: false });
   }
 
   res.json({
@@ -89,7 +93,7 @@ router.post('/sync', protect, asyncHandler(async (req, res) => {
     features: planDetails.features
   };
 
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
   res.json({
     success: true,
