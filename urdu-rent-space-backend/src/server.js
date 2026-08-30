@@ -196,37 +196,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// One-time bootstrap: promote a user to superadmin, but only while zero
-// superadmins exist yet. Self-locking — becomes permanently inert the
-// moment any superadmin exists, so it can't be reused as a backdoor.
-// TODO: remove this route once the first superadmin has been bootstrapped.
-app.post(`${API_PREFIX}/system/bootstrap-superadmin`, express.json(), async (req, res) => {
-  try {
-    const User = require('./models/User');
-    const existingSuperadmin = await User.countDocuments({ adminRole: 'superadmin' });
-    if (existingSuperadmin > 0) {
-      return res.status(403).json({ success: false, message: 'A superadmin already exists — bootstrap is disabled' });
-    }
-
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'email is required' });
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    user.adminRole = 'superadmin';
-    await user.save({ validateBeforeSave: false });
-
-    res.json({ success: true, data: { email: user.email, adminRole: user.adminRole } });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
 // API routes
 app.use(`${API_PREFIX}/auth`, authLimiter, authRoutes);
 app.use(`${API_PREFIX}/users`, userRoutes);
