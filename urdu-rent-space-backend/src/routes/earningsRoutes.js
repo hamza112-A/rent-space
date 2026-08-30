@@ -4,7 +4,11 @@ const {
   getEarningsTransactions,
   requestPayout,
   getPayoutMethods,
-  addPayoutMethod
+  addPayoutMethod,
+  deletePayoutMethod,
+  getConnectStatus,
+  createConnectOnboardingLink,
+  refreshConnectStatus
 } = require('../controllers/earningsController');
 const { protect, ownerOnly } = require('../middleware/auth');
 
@@ -22,5 +26,11 @@ router.get('/transactions', getEarningsTransactions);
 router.post('/payout', requestPayout);
 router.get('/payout-methods', getPayoutMethods);
 router.post('/payout-methods', addPayoutMethod);
+router.delete('/payout-methods/:id', deletePayoutMethod);
+
+// Stripe Connect onboarding (sandbox/demo automated payout rail)
+router.get('/connect/status', getConnectStatus);
+router.post('/connect/onboard', createConnectOnboardingLink);
+router.post('/connect/sync', refreshConnectStatus);
 
 module.exports = router;

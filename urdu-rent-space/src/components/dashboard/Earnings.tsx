@@ -1,9 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -11,11 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   DollarSign,
   TrendingUp,
   TrendingDown,
-  Download,
   Calendar,
   ArrowUpRight,
   ArrowDownRight,
@@ -23,10 +32,14 @@ import {
   CreditCard,
   Clock,
   AlertCircle,
+  Plus,
+  Trash2,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-
-const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
+import { earningsApi } from '@/lib/api';
+import { useSearchParams } from 'react-router-dom';
 
 interface EarningsSummary {
   totalEarnings: number;
@@ -46,6 +59,7 @@ interface Transaction {
   type: string;
   amount: number;
   status: string;
+  payoutStatus?: string;
   createdAt: string;
   bookingId?: {
     listing?: {
@@ -54,48 +68,108 @@ interface Transaction {
   };
 }
 
+interface PayoutMethod {
+  _id: string;
+  type: 'bank_transfer' | 'jazzcash' | 'easypaisa';
+  details: {
+    mobileNumber?: string;
+    accountTitle?: string;
+    bankName?: string;
+    accountNumber?: string;
+    branchCode?: string;
+  };
+  isDefault: boolean;
+}
+
+interface ConnectStatus {
+  connected: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+}
+
+const PAYOUT_METHOD_LABELS: Record<string, string> = {
+  bank_transfer: 'Bank Transfer',
+  jazzcash: 'JazzCash',
+  easypaisa: 'Easypaisa',
+  stripe: 'Stripe (sandbox)',
+};
+
 const Earnings: React.FC = () => {
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
   const [period, setPeriod] = useState('month');
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>([]);
+  const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchEarningsData();
-  }, [period]);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawMethod, setWithdrawMethod] = useState<string>('');
+  const [withdrawing, setWithdrawing] = useState(false);
 
-  const fetchEarningsData = async () => {
+  const [manageOpen, setManageOpen] = useState(false);
+  const [addingMethod, setAddingMethod] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [newMethodType, setNewMethodType] = useState<'bank_transfer' | 'jazzcash' | 'easypaisa'>('jazzcash');
+  const [newMethodDetails, setNewMethodDetails] = useState({
+    mobileNumber: '',
+    accountTitle: '',
+    bankName: '',
+    accountNumber: '',
+    branchCode: '',
+  });
+
+  const fetchEarningsData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [summaryRes, transactionsRes] = await Promise.all([
-        fetch(`${API_URL}/earnings/summary?period=${period}`, {
-          credentials: 'include',
-        }),
-        fetch(`${API_URL}/earnings/transactions?limit=10`, {
-          credentials: 'include',
-        }),
+      const [summaryRes, transactionsRes, methodsRes, connectRes] = await Promise.all([
+        earningsApi.getSummary(period as 'week' | 'month' | 'year'),
+        earningsApi.getTransactions({ limit: 10 }),
+        earningsApi.getPayoutMethods(),
+        earningsApi.getConnectStatus(),
       ]);
 
-      if (summaryRes.ok) {
-        const summaryData = await summaryRes.json();
-        setSummary(summaryData.data);
-      }
-
-      if (transactionsRes.ok) {
-        const transactionsData = await transactionsRes.json();
-        setTransactions(transactionsData.data?.transactions || []);
-      }
+      setSummary(summaryRes.data?.data || null);
+      setTransactions(transactionsRes.data?.data?.transactions || []);
+      setPayoutMethods(methodsRes.data?.data || []);
+      setConnectStatus(connectRes.data?.data || null);
     } catch (err) {
       console.error('Failed to fetch earnings:', err);
       setError('Failed to load earnings data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [period]);
+
+  useEffect(() => {
+    fetchEarningsData();
+  }, [fetchEarningsData]);
+
+  // After returning from Stripe Connect onboarding, re-sync the account
+  // status so payoutsEnabled reflects reality.
+  useEffect(() => {
+    const connectParam = searchParams.get('connect');
+    if (connectParam === 'return') {
+      earningsApi
+        .syncConnectStatus()
+        .then((res) => {
+          setConnectStatus(res.data?.data || null);
+          if (res.data?.data?.payoutsEnabled) {
+            toast.success('Stripe account connected — you can now withdraw via Stripe.');
+          } else {
+            toast.info('Stripe onboarding saved. A few more details may still be needed.');
+          }
+        })
+        .catch(() => {
+          // Non-fatal — the regular getConnectStatus fetch above still ran.
+        });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return `PKR ${(amount || 0).toLocaleString()}`;
@@ -114,6 +188,7 @@ const Earnings: React.FC = () => {
       case 'completed':
         return 'bg-green-500/10 text-green-600 border-green-500/20';
       case 'pending':
+      case 'processing':
         return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
       default:
         return 'bg-muted text-muted-foreground border-border';
@@ -133,13 +208,94 @@ const Earnings: React.FC = () => {
     }
   };
 
+  const availableMethods = [
+    ...payoutMethods.map((m) => ({ value: m.type, label: PAYOUT_METHOD_LABELS[m.type] })),
+    ...(connectStatus?.payoutsEnabled ? [{ value: 'stripe', label: PAYOUT_METHOD_LABELS.stripe }] : []),
+  ];
+
+  const openWithdrawDialog = () => {
+    if (availableMethods.length === 0) {
+      toast.info('Add a payout method first.');
+      setManageOpen(true);
+      return;
+    }
+    setWithdrawMethod(availableMethods[0].value);
+    setWithdrawOpen(true);
+  };
+
+  const handleWithdraw = async () => {
+    if (!withdrawMethod) return;
+    setWithdrawing(true);
+    try {
+      const res = await earningsApi.requestPayout(
+        withdrawMethod as 'stripe' | 'bank_transfer' | 'jazzcash' | 'easypaisa'
+      );
+      const data = res.data?.data;
+      if (data?.status === 'paid') {
+        toast.success(`PKR ${data.amount?.toLocaleString()} sent via Stripe.`);
+      } else {
+        toast.success(
+          data?.note || `Payout of PKR ${data?.amount?.toLocaleString()} requested — we'll process it shortly.`
+        );
+      }
+      setWithdrawOpen(false);
+      fetchEarningsData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to request payout');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleAddMethod = async () => {
+    setAddingMethod(true);
+    try {
+      await earningsApi.addPayoutMethod({
+        type: newMethodType,
+        details: newMethodDetails,
+      });
+      toast.success('Payout method added');
+      setNewMethodDetails({ mobileNumber: '', accountTitle: '', bankName: '', accountNumber: '', branchCode: '' });
+      const res = await earningsApi.getPayoutMethods();
+      setPayoutMethods(res.data?.data || []);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to add payout method');
+    } finally {
+      setAddingMethod(false);
+    }
+  };
+
+  const handleDeleteMethod = async (id: string) => {
+    try {
+      await earningsApi.deletePayoutMethod(id);
+      setPayoutMethods((prev) => prev.filter((m) => m._id !== id));
+      toast.success('Payout method removed');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to remove payout method');
+    }
+  };
+
+  const handleConnectStripe = async () => {
+    setConnecting(true);
+    try {
+      const res = await earningsApi.startConnectOnboarding();
+      const url = res.data?.data?.url;
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to start Stripe onboarding');
+      setConnecting(false);
+    }
+  };
+
   // Build stats from real data
   const stats = summary
     ? [
         {
           label: t.dashboard.totalEarnings,
           value: formatCurrency(summary.totalEarnings),
-          change: `+${summary.thisMonth.growth}%`,
+          change: `${summary.thisMonth.growth >= 0 ? '+' : ''}${summary.thisMonth.growth}%`,
           trend: summary.thisMonth.growth >= 0 ? 'up' : 'down',
           icon: DollarSign,
         },
@@ -160,7 +316,7 @@ const Earnings: React.FC = () => {
         {
           label: t.dashboard.thisMonth,
           value: formatCurrency(summary.thisMonth.earnings),
-          change: `+${summary.thisMonth.growth}%`,
+          change: `${summary.thisMonth.growth >= 0 ? '+' : ''}${summary.thisMonth.growth}%`,
           trend: summary.thisMonth.growth >= 0 ? 'up' : 'down',
           icon: Calendar,
         },
@@ -211,23 +367,16 @@ const Earnings: React.FC = () => {
           <h1 className="text-2xl font-bold text-foreground">{t.dashboard.earnings}</h1>
           <p className="text-muted-foreground">{t.dashboard.totalEarnings}</p>
         </div>
-        <div className="flex gap-2">
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="week">{t.filters.title}</SelectItem>
-              <SelectItem value="month">{t.dashboard.thisMonth}</SelectItem>
-              <SelectItem value="quarter">{t.filters.title}</SelectItem>
-              <SelectItem value="year">{t.filters.title}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" className="gap-2">
-            <Download className="h-4 w-4" />
-            {t.common.save}
-          </Button>
-        </div>
+        <Select value={period} onValueChange={setPeriod}>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="week">This Week</SelectItem>
+            <SelectItem value="month">{t.dashboard.thisMonth}</SelectItem>
+            <SelectItem value="year">This Year</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Stats Cards */}
@@ -309,9 +458,6 @@ const Earnings: React.FC = () => {
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Transactions</CardTitle>
-            <Button variant="ghost" size="sm">
-              View All
-            </Button>
           </CardHeader>
           <CardContent>
             {transactions.length > 0 ? (
@@ -347,7 +493,11 @@ const Earnings: React.FC = () => {
                         {transaction.type === 'earning' || transaction.type === 'payment' ? '+' : '-'}
                         {formatCurrency(transaction.amount)}
                       </p>
-                      <Badge className={getStatusColor(transaction.status)}>{transaction.status}</Badge>
+                      <Badge className={getStatusColor(transaction.payoutStatus || transaction.status)}>
+                        {transaction.payoutStatus === 'completed'
+                          ? 'paid out'
+                          : transaction.payoutStatus || transaction.status}
+                      </Badge>
                     </div>
                   </div>
                 ))}
@@ -378,28 +528,182 @@ const Earnings: React.FC = () => {
               <Button
                 className="w-full gap-2"
                 disabled={!summary?.availableBalance || summary.availableBalance <= 0}
-                onClick={() => toast.info('Withdrawal feature coming soon!')}
+                onClick={openWithdrawDialog}
               >
                 <Wallet className="h-4 w-4" />
-                Withdraw to Bank
+                Withdraw Available Balance
               </Button>
 
-              <Button
-                variant="outline"
-                className="w-full gap-2"
-                onClick={() => toast.info('Add payment method feature coming soon!')}
-              >
+              <Button variant="outline" className="w-full gap-2" onClick={() => setManageOpen(true)}>
                 <CreditCard className="h-4 w-4" />
-                Add Payment Method
+                Manage Payout Methods
               </Button>
             </div>
 
             <p className="text-xs text-muted-foreground text-center">
-              Withdrawals are processed within 1-3 business days
+              Stripe payouts (sandbox) are instant. Bank/JazzCash/Easypaisa payouts are processed
+              by our team within 1-3 business days.
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Withdraw confirmation dialog */}
+      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw Available Balance</DialogTitle>
+            <DialogDescription>
+              You're withdrawing your full available balance of{' '}
+              <span className="font-medium text-foreground">
+                {formatCurrency(summary?.availableBalance || 0)}
+              </span>
+              . Choose where to send it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Payout method</Label>
+            <Select value={withdrawMethod} onValueChange={setWithdrawMethod}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMethods.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawOpen(false)} disabled={withdrawing}>
+              Cancel
+            </Button>
+            <Button onClick={handleWithdraw} disabled={withdrawing || !withdrawMethod} className="gap-2">
+              {withdrawing && <Loader2 className="h-4 w-4 animate-spin" />}
+              Confirm Withdrawal
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage payout methods dialog */}
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payout Methods</DialogTitle>
+            <DialogDescription>Where your earnings get sent when you withdraw.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Stripe Connect */}
+            <div className="p-3 rounded-lg border flex items-center justify-between">
+              <div>
+                <p className="font-medium text-foreground text-sm">Stripe (sandbox)</p>
+                <p className="text-xs text-muted-foreground">
+                  {connectStatus?.payoutsEnabled
+                    ? 'Connected — ready for instant payouts'
+                    : connectStatus?.connected
+                      ? 'Onboarding started — finish it to enable payouts'
+                      : 'Not connected'}
+                </p>
+              </div>
+              {!connectStatus?.payoutsEnabled && (
+                <Button size="sm" variant="outline" className="gap-1" onClick={handleConnectStripe} disabled={connecting}>
+                  {connecting && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {connectStatus?.connected ? 'Finish setup' : 'Connect'}
+                  <ExternalLink className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+
+            {/* Existing manual methods */}
+            {payoutMethods.map((m) => (
+              <div key={m._id} className="p-3 rounded-lg border flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-foreground text-sm">{PAYOUT_METHOD_LABELS[m.type]}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {m.details.mobileNumber || m.details.accountNumber || m.details.accountTitle}
+                  </p>
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => handleDeleteMethod(m._id)}>
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+
+            {/* Add new manual method */}
+            <div className="p-3 rounded-lg border border-dashed space-y-3">
+              <Label>Add bank / mobile wallet method</Label>
+              <Select
+                value={newMethodType}
+                onValueChange={(v: 'bank_transfer' | 'jazzcash' | 'easypaisa') => setNewMethodType(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="jazzcash">JazzCash</SelectItem>
+                  <SelectItem value="easypaisa">Easypaisa</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {newMethodType === 'bank_transfer' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Bank name"
+                    value={newMethodDetails.bankName}
+                    onChange={(e) => setNewMethodDetails({ ...newMethodDetails, bankName: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Account title"
+                    value={newMethodDetails.accountTitle}
+                    onChange={(e) => setNewMethodDetails({ ...newMethodDetails, accountTitle: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Account number"
+                    className="col-span-2"
+                    value={newMethodDetails.accountNumber}
+                    onChange={(e) => setNewMethodDetails({ ...newMethodDetails, accountNumber: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Branch code"
+                    className="col-span-2"
+                    value={newMethodDetails.branchCode}
+                    onChange={(e) => setNewMethodDetails({ ...newMethodDetails, branchCode: e.target.value })}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Mobile number"
+                    value={newMethodDetails.mobileNumber}
+                    onChange={(e) => setNewMethodDetails({ ...newMethodDetails, mobileNumber: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Account title"
+                    value={newMethodDetails.accountTitle}
+                    onChange={(e) => setNewMethodDetails({ ...newMethodDetails, accountTitle: e.target.value })}
+                  />
+                </div>
+              )}
+
+              <Button size="sm" className="gap-1" onClick={handleAddMethod} disabled={addingMethod}>
+                {addingMethod ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                Add Method
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

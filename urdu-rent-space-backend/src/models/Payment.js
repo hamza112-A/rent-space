@@ -39,6 +39,10 @@ const paymentSchema = new mongoose.Schema({
   amount: {
     subtotal: { type: Number, default: 0 },
     serviceFee: { type: Number, default: 0 },
+    // Platform commission on the owner's side, tiered by their subscription
+    // plan at booking time — deducted from the owner's payout, see
+    // ownerEarnings below. Distinct from serviceFee, which the borrower pays.
+    commission: { type: Number, default: 0 },
     taxes: { type: Number, default: 0 },
     deposit: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
@@ -157,10 +161,14 @@ paymentSchema.virtual('netAmount').get(function() {
   return this.amount.total - (this.amount.serviceFee || 0) - (this.amount.taxes || 0);
 });
 
-// Virtual for owner earnings (amount minus platform fees)
+// Virtual for owner earnings. The service fee is charged to the borrower on
+// top of the listing price (see Listing.calculatePrice: total = subtotal +
+// serviceFee), not deducted from the owner. The owner's earning is the
+// subtotal minus the platform's tiered commission (amount.commission, set
+// from the owner's subscription plan at booking time — see
+// docs/redesign/01-business-model.md).
 paymentSchema.virtual('ownerEarnings').get(function() {
-  const platformFee = this.amount.serviceFee || 0;
-  return this.amount.subtotal - (platformFee * 0.7);
+  return (this.amount.subtotal || 0) - (this.amount.commission || 0);
 });
 
 // Virtual for payment status display
@@ -286,12 +294,13 @@ paymentSchema.methods.completePayout = function() {
   return this.save();
 };
 
-// Static method to get payment statistics
+// Static method to get payment statistics. role: 'owner' looks at payments
+// received (payee), anything else looks at payments made (payer).
 paymentSchema.statics.getPaymentStats = function(userId, role = 'user') {
-  const matchField = role === 'owner' ? 'ownerId' : 'userId';
-  
+  const matchField = role === 'owner' ? 'payee' : 'payer';
+
   return this.aggregate([
-    { $match: { [matchField]: mongoose.Types.ObjectId(userId) } },
+    { $match: { [matchField]: new mongoose.Types.ObjectId(userId) } },
     {
       $group: {
         _id: null,
@@ -303,21 +312,23 @@ paymentSchema.statics.getPaymentStats = function(userId, role = 'user') {
           $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] }
         },
         totalAmount: {
-          $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$amount', 0] }
+          $sum: { $cond: [{ $eq: ['$status', 'completed'] }, '$amount.total', 0] }
         },
         totalRefunded: { $sum: '$refund.amount' },
-        averageAmount: { $avg: '$amount' }
+        averageAmount: { $avg: '$amount.total' }
       }
     }
   ]);
 };
 
-// Static method to get earnings by period
+// Static method to get earnings by period (owner's net earnings, i.e. the
+// subtotal they're owed on completed bookings — see the ownerEarnings
+// virtual above for why this isn't amount.total).
 paymentSchema.statics.getEarningsByPeriod = function(ownerId, startDate, endDate) {
   return this.aggregate([
     {
       $match: {
-        ownerId: mongoose.Types.ObjectId(ownerId),
+        payee: new mongoose.Types.ObjectId(ownerId),
         status: 'completed',
         completedAt: { $gte: startDate, $lte: endDate }
       }
@@ -329,7 +340,7 @@ paymentSchema.statics.getEarningsByPeriod = function(ownerId, startDate, endDate
           month: { $month: '$completedAt' },
           day: { $dayOfMonth: '$completedAt' }
         },
-        totalEarnings: { $sum: '$payout.amount' },
+        totalEarnings: { $sum: { $subtract: ['$amount.subtotal', { $ifNull: ['$amount.commission', 0] }] } },
         transactionCount: { $sum: 1 }
       }
     },
