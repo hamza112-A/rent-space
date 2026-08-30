@@ -7,6 +7,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Calendar,
@@ -21,9 +28,11 @@ import {
   Phone,
   Mail,
   Building,
-  Star
+  Star,
+  ShieldAlert,
+  RotateCcw,
 } from 'lucide-react';
-import { bookingApi } from '@/lib/api';
+import { bookingApi, messageApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface Booking {
@@ -33,6 +42,10 @@ interface Booking {
     title: string;
     images?: { url: string }[];
     location?: { address?: string; city?: string };
+    policies?: {
+      cancellation?: 'flexible' | 'moderate' | 'strict' | 'non_refundable';
+      deposit?: { amount?: number; required?: boolean };
+    };
   };
   renter?: {
     _id: string;
@@ -54,11 +67,16 @@ interface Booking {
     subtotal?: number;
     serviceFee?: number;
     deposit?: number;
+    commission?: number;
+    commissionRate?: number;
   };
   status: string;
   paymentStatus?: string;
   message?: string;
   createdAt: string;
+  cancellation?: { cancelledBy?: string; reason?: string };
+  ownerResponse?: { message?: string };
+  flagged?: boolean;
   reviews?: {
     renterReview?: {
       rating: number;
@@ -73,11 +91,41 @@ interface Booking {
   };
 }
 
-const MyBookings: React.FC = () => {
+const CANCELLATION_REASONS = [
+  { value: 'schedule_conflict', label: 'Schedule conflict' },
+  { value: 'item_unavailable', label: 'Item/space no longer available' },
+  { value: 'renter_request', label: 'Renter asked to cancel' },
+  { value: 'pricing_issue', label: 'Pricing or terms issue' },
+  { value: 'safety_concern', label: 'Safety concern' },
+  { value: 'other', label: 'Other' },
+];
+
+const CANCELLATION_POLICY_LABELS: Record<string, string> = {
+  flexible: 'Flexible — full refund up to 24h before start',
+  moderate: 'Moderate — partial refund up to 48h before start',
+  strict: 'Strict — limited refund window',
+  non_refundable: 'Non-refundable',
+};
+
+const STATUS_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+interface MyBookingsProps {
+  onNavigateTab?: (tab: string) => void;
+}
+
+const MyBookings: React.FC<MyBookingsProps> = ({ onNavigateTab }) => {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('incoming');
   const [incomingBookings, setIncomingBookings] = useState<Booking[]>([]);
   const [outgoingBookings, setOutgoingBookings] = useState<Booking[]>([]);
+  const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -87,6 +135,14 @@ const MyBookings: React.FC = () => {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  const [rejectBooking, setRejectBooking] = useState<Booking | null>(null);
+  const [rejectReasonCode, setRejectReasonCode] = useState('');
+  const [rejectNote, setRejectNote] = useState('');
+  const [rejectSubmitting, setRejectSubmitting] = useState(false);
+
+  const [approveBooking, setApproveBooking] = useState<Booking | null>(null);
+  const [approveSubmitting, setApproveSubmitting] = useState(false);
 
   useEffect(() => {
     fetchBookings();
@@ -112,23 +168,48 @@ const MyBookings: React.FC = () => {
     }
   };
 
-  const handleApprove = async (bookingId: string) => {
+  const openApproveDialog = (booking: Booking) => setApproveBooking(booking);
+
+  const handleConfirmApprove = async () => {
+    if (!approveBooking) return;
+    setApproveSubmitting(true);
     try {
-      await bookingApi.approve(bookingId);
+      await bookingApi.approve(approveBooking._id);
       toast.success('Booking approved');
+      setApproveBooking(null);
       fetchBookings();
     } catch (err) {
       toast.error('Failed to approve booking');
+    } finally {
+      setApproveSubmitting(false);
     }
   };
 
-  const handleReject = async (bookingId: string) => {
+  const openRejectDialog = (booking: Booking) => {
+    setRejectBooking(booking);
+    setRejectReasonCode('');
+    setRejectNote('');
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectBooking) return;
+    if (!rejectReasonCode) {
+      toast.error('Please select a reason');
+      return;
+    }
+    const reasonLabel = CANCELLATION_REASONS.find((r) => r.value === rejectReasonCode)?.label || rejectReasonCode;
+    const reason = rejectNote.trim() ? `${reasonLabel}: ${rejectNote.trim()}` : reasonLabel;
+
+    setRejectSubmitting(true);
     try {
-      await bookingApi.reject(bookingId, {});
+      await bookingApi.reject(rejectBooking._id, { reason });
       toast.success('Booking rejected');
+      setRejectBooking(null);
       fetchBookings();
     } catch (err) {
       toast.error('Failed to reject booking');
+    } finally {
+      setRejectSubmitting(false);
     }
   };
 
@@ -141,12 +222,12 @@ const MyBookings: React.FC = () => {
 
   const handleSubmitReview = async () => {
     if (!reviewBooking) return;
-    
+
     if (reviewRating === 0) {
       toast.error('Please select a rating');
       return;
     }
-    
+
     if (!reviewComment.trim()) {
       toast.error('Please write a comment');
       return;
@@ -158,14 +239,13 @@ const MyBookings: React.FC = () => {
         rating: reviewRating,
         comment: reviewComment.trim()
       });
-      
+
       toast.success('Review submitted successfully!');
       setReviewDialogOpen(false);
       setReviewBooking(null);
       setReviewRating(0);
       setReviewComment('');
-      
-      // Refresh bookings to update review status
+
       fetchBookings();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to submit review');
@@ -175,20 +255,18 @@ const MyBookings: React.FC = () => {
   };
 
   const canLeaveReview = (booking: Booking, isRenter: boolean): boolean => {
-    // Can only review completed bookings with paid status
     if (booking.status !== 'completed' || booking.paymentStatus !== 'paid') {
       return false;
     }
-    
-    // Check if user has already reviewed
+
     if (isRenter && booking.reviews?.renterReview) {
       return false;
     }
-    
+
     if (!isRenter && booking.reviews?.ownerReview) {
       return false;
     }
-    
+
     return true;
   };
 
@@ -244,9 +322,64 @@ const MyBookings: React.FC = () => {
     return `${diffDays} day${diffDays > 1 ? 's' : ''}`;
   };
 
+  // Derives the "lifecycle" bucket used for the status filter — distinct from
+  // the raw booking.status, since "approved" needs to split into
+  // upcoming/active based on today's date relative to the rental window.
+  const getLifecycleStatus = (booking: Booking): string => {
+    if (booking.status === 'pending') return 'pending';
+    if (booking.status === 'rejected' || booking.status === 'cancelled') return 'cancelled';
+    if (booking.status === 'completed') return 'completed';
+    if (booking.status === 'approved' || booking.status === 'in_progress') {
+      const now = new Date();
+      const start = new Date(booking.startDate);
+      const end = new Date(booking.endDate);
+      if (now >= start && now <= end) return 'active';
+      return 'upcoming';
+    }
+    return booking.status;
+  };
+
+  const applyStatusFilter = (bookings: Booking[]) => {
+    if (statusFilter === 'all') return bookings;
+    return bookings.filter((b) => getLifecycleStatus(b) === statusFilter);
+  };
+
   const handleViewDetails = (booking: Booking) => {
     setSelectedBooking(booking);
     setDetailsOpen(true);
+  };
+
+  const goToMessages = (booking: Booking, isRenterView: boolean) => {
+    const otherParty = isRenterView ? booking.owner : booking.renter;
+    if (!otherParty) {
+      toast.error('Unable to open conversation');
+      return;
+    }
+    sessionStorage.setItem('pending_conversation', JSON.stringify({
+      participantId: otherParty._id,
+      listingId: booking.listing?._id,
+    }));
+    setDetailsOpen(false);
+    onNavigateTab?.('messages');
+  };
+
+  const goToDispute = (booking: Booking, isRenterView: boolean) => {
+    const otherParty = isRenterView ? booking.owner : booking.renter;
+    sessionStorage.setItem('dispute_prefill', JSON.stringify({
+      bookingId: booking._id,
+      bookingCode: (booking as any).bookingId || booking._id,
+      respondentId: otherParty?._id,
+      respondentName: otherParty?.fullName,
+      listingTitle: booking.listing?.title,
+    }));
+    setDetailsOpen(false);
+    onNavigateTab?.('disputes');
+  };
+
+  const handleBookAgain = (booking: Booking) => {
+    if (booking.listing?._id) {
+      window.open(`/listing/${booking.listing._id}`, '_blank');
+    }
   };
 
   if (loading) {
@@ -275,6 +408,8 @@ const MyBookings: React.FC = () => {
     );
   }
 
+  const filteredIncoming = applyStatusFilter(incomingBookings);
+  const filteredOutgoing = applyStatusFilter(outgoingBookings);
   const pendingCount = incomingBookings.filter(b => b.status === 'pending').length;
 
   return (
@@ -284,28 +419,46 @@ const MyBookings: React.FC = () => {
         <p className="text-muted-foreground">{t.booking.receivedBookings}</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="incoming" className="gap-2">
-            <span>{t.booking.receivedBookings}</span>
-            {pendingCount > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5">
-                {pendingCount}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="outgoing">{t.booking.myBookings}</TabsTrigger>
-        </TabsList>
+      <div className="flex flex-col sm:flex-row justify-between gap-3">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
+          <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-2 sm:grid-cols-none sm:flex">
+            <TabsTrigger value="incoming" className="gap-2">
+              <span>As Owner</span>
+              {pendingCount > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5">
+                  {pendingCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="outgoing">As Borrower</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-        <TabsContent value="incoming" className="mt-6 space-y-4">
-          {incomingBookings.length === 0 ? (
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-44">
+            <SelectValue placeholder="Filter status" />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTERS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsContent value="incoming" className="mt-0 space-y-4">
+          {filteredIncoming.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
                 <p className="text-muted-foreground">{t.common.noResults}</p>
               </CardContent>
             </Card>
           ) : (
-            incomingBookings.map((booking) => (
+            // Pending requests needing a decision come first, then everything else.
+            [...filteredIncoming]
+              .sort((a, b) => (a.status === 'pending' ? -1 : 0) - (b.status === 'pending' ? -1 : 0))
+              .map((booking) => (
               <Card key={booking._id} className="overflow-hidden">
                 <CardContent className="p-0">
                   <div className="flex flex-col sm:flex-row">
@@ -327,16 +480,18 @@ const MyBookings: React.FC = () => {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <Badge className={getStatusColor(booking.status)}>
-                              {booking.status}
+                              {booking.status === 'pending' ? 'Needs your decision' : booking.status}
                             </Badge>
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <Clock className="h-3 w-3" /> {getTimeAgo(booking.createdAt)}
                             </span>
                           </div>
-                          <h3 className="font-semibold text-foreground">
-                            {booking.listing?.title || 'Listing'}
-                          </h3>
-                          
+                          <button className="text-left" onClick={() => handleViewDetails(booking)}>
+                            <h3 className="font-semibold text-foreground hover:underline">
+                              {booking.listing?.title || 'Listing'}
+                            </h3>
+                          </button>
+
                           <div className="mt-3 space-y-2">
                             <div className="flex items-center gap-2 text-sm">
                               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-xs">
@@ -357,45 +512,50 @@ const MyBookings: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        
+
                         <div className="flex flex-col items-end justify-between">
                           <div className="text-right">
                             <p className="text-lg font-bold text-foreground">
                               {formatCurrency(getTotalPrice(booking))}
                             </p>
                             <p className="text-xs text-muted-foreground">Total</p>
+                            {booking.pricing?.commission != null && (
+                              <p className="text-xs text-muted-foreground">
+                                Your payout: {formatCurrency((booking.pricing.subtotal || 0) - booking.pricing.commission)}
+                              </p>
+                            )}
                           </div>
-                          
+
                           {booking.status === 'pending' && (
                             <div className="flex gap-2 mt-4">
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 className="gap-1"
-                                onClick={() => handleReject(booking._id)}
+                                onClick={() => openRejectDialog(booking)}
                               >
                                 <X className="h-4 w-4" /> {t.common.cancel}
                               </Button>
-                              <Button 
-                                size="sm" 
+                              <Button
+                                size="sm"
                                 className="gap-1"
-                                onClick={() => handleApprove(booking._id)}
+                                onClick={() => openApproveDialog(booking)}
                               >
                                 <Check className="h-4 w-4" /> {t.common.confirm}
                               </Button>
                             </div>
                           )}
-                          
+
                           {(booking.status === 'approved' || booking.status === 'confirmed') && (
-                            <Button size="sm" variant="outline" className="gap-1 mt-4">
+                            <Button size="sm" variant="outline" className="gap-1 mt-4" onClick={() => goToMessages(booking, false)}>
                               <MessageSquare className="h-4 w-4" /> {t.dashboard.messages}
                             </Button>
                           )}
-                          
+
                           {canLeaveReview(booking, false) && (
-                            <Button 
-                              size="sm" 
-                              variant="default" 
+                            <Button
+                              size="sm"
+                              variant="default"
                               className="gap-1 mt-4"
                               onClick={() => handleOpenReviewDialog(booking)}
                             >
@@ -412,15 +572,15 @@ const MyBookings: React.FC = () => {
           )}
         </TabsContent>
 
-        <TabsContent value="outgoing" className="mt-6 space-y-4">
-          {outgoingBookings.length === 0 ? (
+        <TabsContent value="outgoing" className="mt-0 space-y-4">
+          {filteredOutgoing.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
                 <p className="text-muted-foreground">{t.common.noResults}</p>
               </CardContent>
             </Card>
           ) : (
-            outgoingBookings.map((booking) => (
+            filteredOutgoing.map((booking) => (
               <Card key={booking._id} className="overflow-hidden">
                 <CardContent className="p-0">
                   <div className="flex flex-col sm:flex-row">
@@ -445,10 +605,12 @@ const MyBookings: React.FC = () => {
                               {booking.status}
                             </Badge>
                           </div>
-                          <h3 className="font-semibold text-foreground">
-                            {booking.listing?.title || 'Listing'}
-                          </h3>
-                          
+                          <button className="text-left" onClick={() => handleViewDetails(booking)}>
+                            <h3 className="font-semibold text-foreground hover:underline">
+                              {booking.listing?.title || 'Listing'}
+                            </h3>
+                          </button>
+
                           <div className="mt-3 space-y-2">
                             <div className="flex items-center gap-2 text-sm">
                               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-xs">
@@ -467,22 +629,34 @@ const MyBookings: React.FC = () => {
                                 ({getDuration(booking.startDate, booking.endDate)})
                               </span>
                             </div>
+                            {booking.listing?.policies?.cancellation && (
+                              <p className="text-xs text-muted-foreground">
+                                Cancellation: {CANCELLATION_POLICY_LABELS[booking.listing.policies.cancellation] || booking.listing.policies.cancellation}
+                              </p>
+                            )}
                           </div>
                         </div>
-                        
+
                         <div className="flex flex-col items-end justify-between">
                           <div className="text-right">
                             <p className="text-lg font-bold text-foreground">
                               {formatCurrency(getTotalPrice(booking))}
                             </p>
-                            <p className="text-xs text-muted-foreground">Total</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCurrency(booking.pricing?.subtotal || 0)} + {formatCurrency(booking.pricing?.serviceFee || 0)} fee
+                            </p>
                           </div>
-                          
-                          <div className="flex gap-2 mt-4">
+
+                          <div className="flex flex-wrap justify-end gap-2 mt-4">
+                            {booking.status === 'completed' && (
+                              <Button size="sm" variant="outline" className="gap-1" onClick={() => handleBookAgain(booking)}>
+                                <RotateCcw className="h-4 w-4" /> Book again
+                              </Button>
+                            )}
                             {canLeaveReview(booking, true) && (
-                              <Button 
-                                size="sm" 
-                                variant="default" 
+                              <Button
+                                size="sm"
+                                variant="default"
                                 className="gap-1"
                                 onClick={() => handleOpenReviewDialog(booking)}
                               >
@@ -506,7 +680,7 @@ const MyBookings: React.FC = () => {
 
       {/* Booking Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t.listing.viewDetails}</DialogTitle>
           </DialogHeader>
@@ -541,6 +715,39 @@ const MyBookings: React.FC = () => {
                 </div>
               </div>
 
+              {/* Timeline */}
+              <div className="bg-muted/50 rounded-lg p-4">
+                <p className="text-sm font-medium mb-2">Timeline</p>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {['requested', 'approved', 'fulfilled', 'completed'].map((step, idx) => {
+                    const reached =
+                      (step === 'requested') ||
+                      (step === 'approved' && !['pending', 'rejected'].includes(selectedBooking.status)) ||
+                      (step === 'fulfilled' && ['in_progress', 'completed'].includes(selectedBooking.status)) ||
+                      (step === 'completed' && selectedBooking.status === 'completed');
+                    const failed = (selectedBooking.status === 'rejected' || selectedBooking.status === 'cancelled') && idx > 0 && !reached;
+                    return (
+                      <Badge
+                        key={step}
+                        variant="outline"
+                        className={reached ? 'border-green-500/40 text-green-600' : failed ? 'border-red-500/30 text-muted-foreground' : 'text-muted-foreground'}
+                      >
+                        {step}
+                      </Badge>
+                    );
+                  })}
+                  {(selectedBooking.status === 'rejected' || selectedBooking.status === 'cancelled') && (
+                    <Badge className="bg-red-500/10 text-red-600 border-red-500/20">{selectedBooking.status}</Badge>
+                  )}
+                </div>
+                {selectedBooking.cancellation?.reason && (
+                  <p className="text-xs text-muted-foreground mt-2">Reason: {selectedBooking.cancellation.reason}</p>
+                )}
+                {selectedBooking.ownerResponse?.message && selectedBooking.status === 'rejected' && (
+                  <p className="text-xs text-muted-foreground mt-2">Reason: {selectedBooking.ownerResponse.message}</p>
+                )}
+              </div>
+
               {/* Dates */}
               <div className="bg-muted/50 rounded-lg p-4">
                 <div className="flex items-center gap-2 text-sm font-medium mb-2">
@@ -560,6 +767,13 @@ const MyBookings: React.FC = () => {
                 <p className="text-sm text-muted-foreground mt-2">
                   {t.booking.duration}: {getDuration(selectedBooking.startDate, selectedBooking.endDate)}
                 </p>
+                {selectedBooking.listing?.policies?.cancellation && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Cancellation policy: <span className="font-medium text-foreground">
+                      {CANCELLATION_POLICY_LABELS[selectedBooking.listing.policies.cancellation] || selectedBooking.listing.policies.cancellation}
+                    </span>
+                  </p>
+                )}
               </div>
 
               {/* Owner/Renter Info */}
@@ -615,6 +829,12 @@ const MyBookings: React.FC = () => {
                     <span>{formatCurrency(selectedBooking.pricing.deposit)}</span>
                   </div>
                 )}
+                {selectedBooking.owner && selectedBooking.pricing?.commission != null && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Platform commission</span>
+                    <span>-{formatCurrency(selectedBooking.pricing.commission)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-semibold pt-2 border-t">
                   <span>{t.booking.grandTotal}</span>
                   <span>{formatCurrency(getTotalPrice(selectedBooking))}</span>
@@ -622,16 +842,115 @@ const MyBookings: React.FC = () => {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={() => setDetailsOpen(false)}>
-                  {t.common.close}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="gap-1"
+                  onClick={() => goToMessages(selectedBooking, !!selectedBooking.owner)}
+                >
+                  <MessageSquare className="h-4 w-4" /> {t.dashboard.messages}
                 </Button>
-                <Button className="flex-1" onClick={() => window.open(`/listing/${selectedBooking.listing?._id}`, '_blank')}>
-                  {t.listing.viewDetails}
+                {['approved', 'in_progress', 'completed'].includes(selectedBooking.status) && (
+                  <Button
+                    variant="outline"
+                    className="gap-1 text-destructive"
+                    onClick={() => goToDispute(selectedBooking, !!selectedBooking.owner)}
+                  >
+                    <ShieldAlert className="h-4 w-4" /> Raise a dispute
+                  </Button>
+                )}
+                {selectedBooking.status === 'completed' && !selectedBooking.owner && (
+                  <Button variant="outline" className="gap-1" onClick={() => handleBookAgain(selectedBooking)}>
+                    <RotateCcw className="h-4 w-4" /> Book again
+                  </Button>
+                )}
+                <Button variant="outline" className="ml-auto" onClick={() => setDetailsOpen(false)}>
+                  {t.common.close}
                 </Button>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve confirmation with commission breakdown */}
+      <Dialog open={!!approveBooking} onOpenChange={(open) => !open && setApproveBooking(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Approve booking?</DialogTitle>
+            <DialogDescription>
+              Here's what you'll be paid once this booking completes.
+            </DialogDescription>
+          </DialogHeader>
+          {approveBooking && (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Rental subtotal</span>
+                <span>{formatCurrency(approveBooking.pricing?.subtotal || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  Platform commission{approveBooking.pricing?.commissionRate ? ` (${Math.round(approveBooking.pricing.commissionRate * 100)}%)` : ''}
+                </span>
+                <span>-{formatCurrency(approveBooking.pricing?.commission || 0)}</span>
+              </div>
+              <div className="flex justify-between font-semibold pt-2 border-t">
+                <span>Your payout</span>
+                <span>{formatCurrency((approveBooking.pricing?.subtotal || 0) - (approveBooking.pricing?.commission || 0))}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveBooking(null)} disabled={approveSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmApprove} disabled={approveSubmitting}>
+              {approveSubmitting ? 'Approving...' : 'Approve'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Structured rejection reason dialog */}
+      <Dialog open={!!rejectBooking} onOpenChange={(open) => !open && setRejectBooking(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject booking request</DialogTitle>
+            <DialogDescription>Let the renter know why — this helps with dispute triage later.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Select value={rejectReasonCode} onValueChange={setRejectReasonCode}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CANCELLATION_REASONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Additional note (optional)</Label>
+              <Textarea
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Add any extra context for the renter..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectBooking(null)} disabled={rejectSubmitting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmReject} disabled={rejectSubmitting || !rejectReasonCode}>
+              {rejectSubmitting ? 'Rejecting...' : 'Reject booking'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -644,7 +963,7 @@ const MyBookings: React.FC = () => {
               Share your experience with {reviewBooking?.listing?.title}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             {/* Rating */}
             <div className="space-y-2">

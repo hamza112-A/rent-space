@@ -4,87 +4,16 @@ const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const Payment = require('../models/Payment');
 const asyncHandler = require('../middleware/asyncHandler');
+const { SUBSCRIPTION_PLANS } = require('../config/subscriptionPlans');
 
-// Subscription Plans Configuration
-const SUBSCRIPTION_PLANS = {
-  free: {
-    id: 'free',
-    name: 'Free',
-    nameUrdu: 'مفت',
-    price: 0,
-    currency: 'PKR',
-    maxListings: 5,
-    listingDuration: 48, // hours
-    features: {
-      prioritySupport: false,
-      enhancedVisibility: false,
-      analytics: false,
-      featuredBadge: false,
-      topVisibility: false
-    },
-    benefits: [
-      '5 listings',
-      'Basic support',
-      'Standard visibility'
-    ],
-    limitations: [
-      'Limited to 5 listings',
-      'Listings expire after 48 hours',
-      'Standard visibility only',
-      'Basic support'
-    ]
-  },
-  basic: {
-    id: 'basic',
-    name: 'Basic',
-    nameUrdu: 'بنیادی',
-    price: 999,
-    currency: 'PKR',
-    period: 'month',
-    maxListings: 20,
-    listingDuration: 720, // 30 days in hours
-    features: {
-      prioritySupport: true,
-      enhancedVisibility: true,
-      analytics: true,
-      featuredBadge: false,
-      topVisibility: false
-    },
-    benefits: [
-      '20 listings',
-      'Priority support',
-      'Enhanced visibility',
-      'Analytics dashboard',
-      'Listings active for 30 days'
-    ],
-    limitations: []
-  },
-  premium: {
-    id: 'premium',
-    name: 'Premium',
-    nameUrdu: 'پریمیم',
-    price: 2499,
-    currency: 'PKR',
-    period: 'month',
-    maxListings: -1, // unlimited
-    listingDuration: -1, // never expires
-    features: {
-      prioritySupport: true,
-      enhancedVisibility: true,
-      analytics: true,
-      featuredBadge: true,
-      topVisibility: true
-    },
-    benefits: [
-      'Unlimited listings',
-      '24/7 support',
-      'Top visibility',
-      'Advanced analytics',
-      'Featured badge',
-      'Listings never expire'
-    ],
-    limitations: []
-  }
+// Paid tiers an owner can subscribe/upgrade to (free is the default, not purchasable).
+const PAID_PLAN_IDS = ['plus', 'pro', 'business'];
+
+// Featured-listing credits reset monthly on the subscription's billing cycle.
+const oneMonthFromNow = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return d;
 };
 
 // @route   GET /api/v1/subscriptions/plans
@@ -103,23 +32,25 @@ router.get('/current', protect, asyncHandler(async (req, res) => {
   
   const currentPlan = user.subscription?.plan || 'free';
   const planDetails = SUBSCRIPTION_PLANS[currentPlan] || SUBSCRIPTION_PLANS.free;
-  
+
   // If user's subscription data doesn't match plan details, sync it
-  const needsSync = 
+  const needsSync =
     user.subscription?.maxListings !== planDetails.maxListings ||
-    user.subscription?.listingDuration !== planDetails.listingDuration;
-  
+    user.subscription?.listingDuration !== planDetails.listingDuration ||
+    user.subscription?.commissionRate !== planDetails.commissionRate;
+
   if (needsSync) {
     user.subscription = {
       ...user.subscription,
       plan: currentPlan,
       maxListings: planDetails.maxListings,
       listingDuration: planDetails.listingDuration,
+      commissionRate: planDetails.commissionRate,
       features: planDetails.features
     };
     await user.save();
   }
-  
+
   res.json({
     success: true,
     data: {
@@ -130,6 +61,8 @@ router.get('/current', protect, asyncHandler(async (req, res) => {
       autoRenew: user.subscription?.autoRenew || false,
       maxListings: planDetails.maxListings,
       listingDuration: planDetails.listingDuration,
+      commissionRate: planDetails.commissionRate,
+      featuredCredits: user.subscription?.featuredCredits || { total: planDetails.featuredCredits, used: 0 },
       features: planDetails.features,
       planDetails
     }
@@ -151,11 +84,13 @@ router.post('/sync', protect, asyncHandler(async (req, res) => {
     autoRenew: user.subscription?.autoRenew || false,
     maxListings: planDetails.maxListings,
     listingDuration: planDetails.listingDuration,
+    commissionRate: planDetails.commissionRate,
+    featuredCredits: user.subscription?.featuredCredits || { total: planDetails.featuredCredits, used: 0, resetAt: oneMonthFromNow() },
     features: planDetails.features
   };
-  
+
   await user.save();
-  
+
   res.json({
     success: true,
     message: 'Subscription synced successfully',
@@ -163,6 +98,7 @@ router.post('/sync', protect, asyncHandler(async (req, res) => {
       plan: user.subscription.plan,
       maxListings: user.subscription.maxListings,
       listingDuration: user.subscription.listingDuration,
+      commissionRate: user.subscription.commissionRate,
       features: user.subscription.features
     }
   });
@@ -172,11 +108,11 @@ router.post('/sync', protect, asyncHandler(async (req, res) => {
 // Subscribe to a plan
 router.post('/subscribe', protect, asyncHandler(async (req, res) => {
   const { planId, paymentIntentId } = req.body;
-  
-  if (!planId || !['basic', 'premium'].includes(planId)) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Valid plan ID is required (basic or premium)' 
+
+  if (!planId || !PAID_PLAN_IDS.includes(planId)) {
+    return res.status(400).json({
+      success: false,
+      message: `Valid plan ID is required (${PAID_PLAN_IDS.join(', ')})`
     });
   }
 
@@ -221,6 +157,8 @@ router.post('/subscribe', protect, asyncHandler(async (req, res) => {
     autoRenew: false,
     maxListings: plan.maxListings,
     listingDuration: plan.listingDuration,
+    commissionRate: plan.commissionRate,
+    featuredCredits: { total: plan.featuredCredits, used: 0, resetAt: endDate },
     features: plan.features
   };
 
@@ -271,10 +209,10 @@ router.post('/cancel', protect, asyncHandler(async (req, res) => {
 router.post('/create-payment', protect, asyncHandler(async (req, res) => {
   const { planId } = req.body;
 
-  if (!planId || !['basic', 'premium'].includes(planId)) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Valid plan ID is required' 
+  if (!planId || !PAID_PLAN_IDS.includes(planId)) {
+    return res.status(400).json({
+      success: false,
+      message: `Valid plan ID is required (${PAID_PLAN_IDS.join(', ')})`
     });
   }
 

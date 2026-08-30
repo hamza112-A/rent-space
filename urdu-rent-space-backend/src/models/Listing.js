@@ -34,6 +34,12 @@ const listingSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'Owner is required']
   },
+  // Set when a Business-tier team member (not the billing owner) created
+  // this listing on the organization's behalf — see models/Organization.js.
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
 
   // Category Information
   category: {
@@ -228,7 +234,7 @@ const listingSchema = new mongoose.Schema({
   expiresAt: Date, // When the listing will auto-deactivate
   ownerPlan: {
     type: String,
-    enum: ['free', 'basic', 'premium'],
+    enum: ['free', 'plus', 'pro', 'business'],
     default: 'free'
   },
 

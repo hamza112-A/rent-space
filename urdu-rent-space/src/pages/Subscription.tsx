@@ -44,6 +44,9 @@ interface Plan {
   period?: string;
   maxListings: number;
   listingDuration: number;
+  commissionRate: number;
+  featuredCredits: number;
+  custom?: boolean;
   features: {
     prioritySupport: boolean;
     enhancedVisibility: boolean;
@@ -62,6 +65,8 @@ interface CurrentSubscription {
   endDate: string | null;
   maxListings: number;
   listingDuration: number;
+  commissionRate: number;
+  featuredCredits: { total: number; used: number };
   features: Plan['features'];
   planDetails: Plan;
 }
@@ -237,16 +242,17 @@ const Subscription: React.FC = () => {
 
   const getPlanIcon = (planId: string) => {
     switch (planId) {
-      case 'premium': return <Crown className="w-6 h-6" />;
-      case 'basic': return <Star className="w-6 h-6" />;
+      case 'business': return <Crown className="w-6 h-6" />;
+      case 'pro': return <Zap className="w-6 h-6" />;
+      case 'plus': return <Star className="w-6 h-6" />;
       default: return <Shield className="w-6 h-6" />;
     }
   };
 
   const getListingDurationText = (hours: number) => {
     if (hours === -1) return 'Never expires';
-    if (hours === 48) return '48 hours';
     if (hours === 720) return '30 days';
+    if (hours === 1440) return '60 days';
     return `${hours} hours`;
   };
 
@@ -298,6 +304,12 @@ const Subscription: React.FC = () => {
                         {getListingDurationText(currentSubscription.listingDuration)}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-muted-foreground">Commission</p>
+                      <p className="font-medium">
+                        {Math.round((currentSubscription.commissionRate ?? 0.1) * 100)}% per booking
+                      </p>
+                    </div>
                     {currentSubscription.endDate && (
                       <div>
                         <p className="text-muted-foreground">Renews</p>
@@ -316,19 +328,19 @@ const Subscription: React.FC = () => {
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {plans.map((plan) => {
                 const isCurrentPlan = currentSubscription?.plan === plan.id;
-                const isPremium = plan.id === 'premium';
-                
+                const isPro = plan.id === 'pro';
+
                 return (
                   <Card
                     key={plan.id}
                     className={`relative overflow-hidden transition-all ${
-                      isPremium ? 'border-primary shadow-xl scale-105' : ''
+                      isPro ? 'border-primary shadow-xl scale-105' : ''
                     } ${isCurrentPlan ? 'ring-2 ring-green-500' : ''}`}
                   >
-                    {isPremium && (
+                    {isPro && (
                       <div className="absolute top-0 right-0">
                         <Badge className="rounded-none rounded-bl-lg bg-gradient-to-r from-amber-400 to-orange-400 text-white">
                           <Crown className="w-3 h-3 mr-1" /> Best Value
@@ -349,34 +361,41 @@ const Subscription: React.FC = () => {
                       </div>
                       <CardTitle className="text-2xl">{plan.name}</CardTitle>
                       <CardDescription>
-                        {plan.id === 'free' ? 'Basic access with limitations' : 
-                         plan.id === 'basic' ? 'Great for casual renters' : 
-                         'Full access with premium benefits'}
+                        {plan.id === 'free' ? 'Try it out' :
+                         plan.id === 'plus' ? 'Active owner, renting a few things regularly' :
+                         plan.id === 'pro' ? 'Semi-professional / small rental business' :
+                         'Rental agencies, fleets & equipment companies'}
                       </CardDescription>
                       <div className="mt-4">
                         <span className="text-4xl font-bold text-foreground">
-                          PKR {plan.price.toLocaleString()}
+                          {plan.custom ? `From PKR ${plan.price.toLocaleString()}` : `PKR ${plan.price.toLocaleString()}`}
                         </span>
                         {plan.price > 0 && (
                           <span className="text-muted-foreground">/month</span>
                         )}
                       </div>
                     </CardHeader>
-                    
+
                     <CardContent className="space-y-6">
                       {/* Key Stats */}
-                      <div className="grid grid-cols-2 gap-3 p-3 bg-muted/50 rounded-lg">
+                      <div className="grid grid-cols-3 gap-2 p-3 bg-muted/50 rounded-lg">
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-foreground">
+                          <p className="text-xl font-bold text-foreground">
                             {plan.maxListings === -1 ? '∞' : plan.maxListings}
                           </p>
                           <p className="text-xs text-muted-foreground">Listings</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-foreground">
-                            {plan.listingDuration === -1 ? '∞' : plan.listingDuration === 48 ? '48h' : '30d'}
+                          <p className="text-xl font-bold text-foreground">
+                            {plan.listingDuration === -1 ? '∞' : plan.listingDuration === 720 ? '30d' : '60d'}
                           </p>
                           <p className="text-xs text-muted-foreground">Duration</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xl font-bold text-primary">
+                            {Math.round(plan.commissionRate * 100)}%
+                          </p>
+                          <p className="text-xs text-muted-foreground">Commission</p>
                         </div>
                       </div>
 
@@ -412,7 +431,7 @@ const Subscription: React.FC = () => {
                         onClick={() => handleSubscribe(plan)}
                         className="w-full"
                         size="lg"
-                        variant={isPremium ? 'default' : 'outline'}
+                        variant={isPro ? 'default' : 'outline'}
                         disabled={isCurrentPlan || plan.id === 'free'}
                       >
                         {isCurrentPlan ? (

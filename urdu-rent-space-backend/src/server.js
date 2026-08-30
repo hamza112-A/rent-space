@@ -36,6 +36,8 @@ const earningsRoutes = require('./routes/earningsRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const disputeRoutes = require('./routes/disputeRoutes');
+const organizationRoutes = require('./routes/organizationRoutes');
+const storefrontRoutes = require('./routes/storefrontRoutes');
 
 const app = express();
 const server = createServer(app);
@@ -80,10 +82,22 @@ app.post(`${API_PREFIX}/payments/webhook`, express.raw({ type: 'application/json
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const paymentIntent = event.data.object;
-      await Payment.findOneAndUpdate(
-        { stripePaymentIntentId: paymentIntent.id },
-        { status: 'completed', paidAt: new Date(), transactionId: paymentIntent.id }
-      );
+      const payment = await Payment.findOne({ stripePaymentIntentId: paymentIntent.id });
+      if (payment && payment.status !== 'completed') {
+        payment.status = 'completed';
+        payment.completedAt = new Date();
+        payment.transactionId = paymentIntent.id;
+        // The owner is owed the subtotal minus the platform's tiered
+        // commission, not amount.total (which also includes the borrower's
+        // service fee) — see Payment.ownerEarnings. The /payments/confirm
+        // route usually sets this first when the client is present; this
+        // webhook is the fallback path (e.g. the client closed the tab
+        // before confirm ran) and must set it too.
+        if (!payment.payout?.amount) {
+          payment.payout = { amount: payment.ownerEarnings, status: 'pending' };
+        }
+        await payment.save();
+      }
       break;
     }
     case 'payment_intent.payment_failed': {
@@ -197,6 +211,8 @@ app.use(`${API_PREFIX}/earnings`, earningsRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
 app.use(`${API_PREFIX}/disputes`, disputeRoutes);
+app.use(`${API_PREFIX}/organizations`, organizationRoutes);
+app.use(`${API_PREFIX}/storefront`, storefrontRoutes);
 
 // Socket.IO connection handling
 socketHandler(io);

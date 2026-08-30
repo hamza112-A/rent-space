@@ -64,6 +64,20 @@ const bookingSchema = new mongoose.Schema({
       default: 0,
       min: [0, 'Service fee cannot be negative']
     },
+    // Platform commission on the owner's side, deducted from their payout —
+    // rate is locked in from the owner's subscription tier at booking time
+    // (see config/subscriptionPlans.js), separate from and additive to the
+    // borrower-facing serviceFee above.
+    commissionRate: {
+      type: Number,
+      default: 0.10,
+      min: [0, 'Commission rate cannot be negative']
+    },
+    commission: {
+      type: Number,
+      default: 0,
+      min: [0, 'Commission cannot be negative']
+    },
     additionalFees: [{
       name: String,
       amount: Number,

@@ -3,7 +3,9 @@ const router = express.Router();
 const { protect, borrowerOnly, ownerOnly } = require('../middleware/auth');
 const Booking = require('../models/Booking');
 const Listing = require('../models/Listing');
+const User = require('../models/User');
 const asyncHandler = require('../middleware/asyncHandler');
+const { getCommissionRate } = require('../config/subscriptionPlans');
 
 // @route   GET /api/v1/bookings
 router.get('/', protect, asyncHandler(async (req, res) => {
@@ -32,9 +34,9 @@ router.get('/', protect, asyncHandler(async (req, res) => {
   if (status) query.status = status;
 
   const bookings = await Booking.find(query)
-    .populate('listing', 'title images pricing')
-    .populate('renter', 'fullName profileImage phone')
-    .populate('owner', 'fullName profileImage phone')
+    .populate('listing', 'title images pricing location policies')
+    .populate('renter', 'fullName profileImage phone email')
+    .populate('owner', 'fullName profileImage phone email')
     .sort({ createdAt: -1 });
 
   res.json({ success: true, data: bookings });
@@ -134,8 +136,15 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
   }
   
   const subtotal = dailyRate * days;
-  const serviceFee = Math.round(subtotal * 0.05); // 5% service fee
+  const serviceFee = Math.round(subtotal * 0.05); // 5% borrower-side service fee, flat regardless of owner's tier
   const totalAmount = subtotal + serviceFee;
+
+  // Owner-side commission, tiered by the owner's subscription plan at the
+  // time of booking (see docs/redesign/01-business-model.md). Deducted from
+  // the owner's payout, not added to what the borrower pays.
+  const owner = await User.findById(listing.owner).select('subscription.plan subscription.commissionRate');
+  const commissionRate = owner?.subscription?.commissionRate ?? getCommissionRate(owner?.subscription?.plan);
+  const commission = Math.round(subtotal * commissionRate);
 
   // Prepare terms acceptance data
   const termsAcceptance = disclaimerAccepted ? {
@@ -161,6 +170,8 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
       unitPrice: dailyRate,
       subtotal,
       serviceFee,
+      commissionRate,
+      commission,
       deposit: listing.policies?.deposit?.amount || 0,
       totalAmount,
       currency: listing.pricing?.currency || 'PKR'
@@ -177,7 +188,7 @@ router.post('/', protect, borrowerOnly, asyncHandler(async (req, res) => {
 const BOOKING_STATUSES = ['pending', 'approved', 'rejected', 'cancelled', 'in_progress', 'completed'];
 
 router.put('/:id/status', protect, asyncHandler(async (req, res) => {
-  const { status } = req.body;
+  const { status, reason } = req.body;
   const booking = await Booking.findById(req.params.id);
 
   if (!booking) {
@@ -213,6 +224,33 @@ router.put('/:id/status', protect, asyncHandler(async (req, res) => {
   }
 
   booking.status = status;
+
+  if (status === 'rejected') {
+    booking.rejectedAt = new Date();
+    booking.ownerResponse = { message: reason || '', respondedAt: new Date() };
+  }
+
+  if (status === 'cancelled') {
+    booking.cancellation = {
+      cancelledBy: isRenter ? 'renter' : isOwner ? 'owner' : 'admin',
+      cancelledAt: new Date(),
+      reason: reason || ''
+    };
+    const refundInfo = booking.refundEligible;
+    if (refundInfo.eligible) {
+      booking.cancellation.refundAmount = Math.round(booking.pricing.totalAmount * refundInfo.percentage / 100);
+      booking.cancellation.refundStatus = 'pending';
+    }
+  }
+
+  if (status === 'approved') {
+    booking.approvedAt = new Date();
+  }
+
+  if (status === 'completed') {
+    booking.completedAt = new Date();
+  }
+
   await booking.save();
 
   res.json({ success: true, data: booking });
