@@ -2,9 +2,13 @@ const Dispute = require('../models/Dispute');
 const User = require('../models/User');
 const Booking = require('../models/Booking');
 const Listing = require('../models/Listing');
+const Payment = require('../models/Payment');
 const asyncHandler = require('../middleware/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
 const mongoose = require('mongoose');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { uploadToCloudinary } = require('../services/uploadService');
+const { logAdminAction } = require('../utils/adminAudit');
 
 // @desc    Create a new dispute
 // @route   POST /api/v1/disputes
@@ -51,6 +55,26 @@ exports.createDispute = asyncHandler(async (req, res, next) => {
     }
   }
 
+  // Evidence uploaded as files at filing time (see docs/redesign/07-disputes.md
+  // — evidence should be step 2 of filing, not an afterthought).
+  const uploadedEvidence = [];
+  if (req.files?.length) {
+    for (const file of req.files) {
+      try {
+        const result = await uploadToCloudinary(file.buffer, { folder: 'dispute-evidence' });
+        uploadedEvidence.push({ type: 'image', url: result.secure_url, description: file.originalname });
+      } catch (err) {
+        const base64 = file.buffer.toString('base64');
+        uploadedEvidence.push({ type: 'image', url: `data:${file.mimetype};base64,${base64}`, description: file.originalname });
+      }
+    }
+  }
+
+  let parsedEvidence = evidence;
+  if (typeof evidence === 'string') {
+    try { parsedEvidence = JSON.parse(evidence); } catch { parsedEvidence = []; }
+  }
+
   // Create dispute
   const dispute = await Dispute.create({
     complainant: req.user._id,
@@ -60,7 +84,7 @@ exports.createDispute = asyncHandler(async (req, res, next) => {
     category,
     subject,
     description,
-    evidence: evidence || [],
+    evidence: [...(parsedEvidence || []), ...uploadedEvidence],
     requestedAmount,
     timeline: [{
       action: 'Dispute created',
@@ -330,6 +354,8 @@ exports.assignDispute = asyncHandler(async (req, res, next) => {
 
   await dispute.save();
 
+  logAdminAction(req, { action: `Dispute assigned to ${admin.fullName}`, targetType: 'dispute', targetId: dispute._id, details: { adminId } });
+
   res.json({
     success: true,
     data: dispute
@@ -372,6 +398,8 @@ exports.updateDisputeStatus = asyncHandler(async (req, res, next) => {
 
   await dispute.save();
 
+  logAdminAction(req, { action: `Dispute status updated to ${status || dispute.status}`, targetType: 'dispute', targetId: dispute._id, details: { status, priority, internalNote } });
+
   res.json({
     success: true,
     data: dispute
@@ -403,20 +431,71 @@ exports.resolveDispute = asyncHandler(async (req, res, next) => {
     dispute.awardedAmount = awardedAmount;
   }
 
+  // Give a resolution with action=refund_issued an actual financial effect —
+  // a decision that only changes a database field is not a resolution (see
+  // docs/redesign/07-disputes.md). Only handles the Stripe rail, since that's
+  // the only real payment gateway integrated today; manual-rail refunds
+  // (JazzCash/Easypaisa/bank) still require admin follow-up outside the app.
+  let refundResult = null;
+  if (action === 'refund_issued' && awardedAmount > 0 && dispute.booking) {
+    const payment = await Payment.findOne({
+      booking: dispute.booking,
+      status: 'completed',
+      method: 'stripe'
+    }).sort({ createdAt: -1 });
+
+    if (payment?.stripePaymentIntentId) {
+      const refundableAmount = Math.min(awardedAmount, payment.amount.total - (payment.refund?.amount || 0));
+      if (refundableAmount > 0) {
+        try {
+          const refund = await stripe.refunds.create({
+            payment_intent: payment.stripePaymentIntentId,
+            amount: Math.round(refundableAmount * 100),
+            metadata: { disputeId: dispute._id.toString() }
+          });
+
+          payment.refund.amount = (payment.refund?.amount || 0) + refundableAmount;
+          payment.refund.reason = `Dispute resolution: ${dispute.disputeId}`;
+          payment.refund.status = 'completed';
+          payment.refund.processedAt = new Date();
+          payment.refund.refundId = refund.id;
+          payment.status = payment.refund.amount >= payment.amount.total ? 'refunded' : 'partial_refund';
+          payment.refundedAt = new Date();
+          await payment.save();
+
+          refundResult = { refunded: true, amount: refundableAmount, refundId: refund.id };
+        } catch (err) {
+          refundResult = { refunded: false, error: err.message };
+        }
+      }
+    } else {
+      refundResult = { refunded: false, error: 'No Stripe payment found for this booking to refund' };
+    }
+  }
+
   dispute.timeline.push({
     action: 'Dispute resolved',
     performedBy: req.user._id,
     timestamp: new Date(),
-    notes: decision
+    notes: refundResult?.refunded
+      ? `${decision} — PKR ${refundResult.amount} refunded`
+      : decision
   });
 
   await dispute.save();
 
   // TODO: Send notification to both parties
-  // TODO: Process refund if applicable
+
+  logAdminAction(req, {
+    action: `Dispute resolved: ${decision}`,
+    targetType: 'dispute',
+    targetId: dispute._id,
+    details: { decision, action, awardedAmount, refund: refundResult }
+  });
 
   res.json({
     success: true,
+    refund: refundResult,
     data: dispute
   });
 });
@@ -445,6 +524,8 @@ exports.closeDispute = asyncHandler(async (req, res, next) => {
   });
 
   await dispute.save();
+
+  logAdminAction(req, { action: 'Dispute closed', targetType: 'dispute', targetId: dispute._id, details: { closureReason } });
 
   res.json({
     success: true,

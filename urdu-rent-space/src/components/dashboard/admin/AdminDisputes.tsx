@@ -248,13 +248,27 @@ const AdminDisputes: React.FC = () => {
         awardedAmount: resolutionForm.awardedAmount ? parseFloat(resolutionForm.awardedAmount) : undefined
       };
 
-      await api.put(`/disputes/${selectedDispute._id}/resolve`, payload);
-      
-      toast({
-        title: 'Success',
-        description: 'Dispute has been resolved'
-      });
-      
+      const res = await api.put(`/disputes/${selectedDispute._id}/resolve`, payload);
+      const refund = res.data?.refund;
+
+      if (refund?.refunded) {
+        toast({
+          title: 'Dispute resolved',
+          description: `PKR ${refund.amount.toLocaleString()} refunded to the complainant via Stripe.`
+        });
+      } else if (refund && !refund.refunded) {
+        toast({
+          title: 'Dispute resolved — refund failed',
+          description: refund.error || 'Could not process the refund automatically. Process it manually.',
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'Success',
+          description: 'Dispute has been resolved'
+        });
+      }
+
       setShowResolveDialog(false);
       setResolutionForm({ decision: '', explanation: '', action: '', awardedAmount: '' });
       fetchDisputes();
@@ -377,7 +391,18 @@ const AdminDisputes: React.FC = () => {
                       {dispute.disputeId} • Filed {new Date(dispute.createdAt).toLocaleDateString()}
                     </CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    {!['resolved', 'closed'].includes(dispute.status) && (() => {
+                      const ageHours = (Date.now() - new Date(dispute.createdAt).getTime()) / (1000 * 60 * 60);
+                      const slaHours: Record<string, number> = { urgent: 24, high: 48, medium: 96, low: 168 };
+                      const overSla = ageHours > (slaHours[dispute.priority] || 96);
+                      const ageDays = Math.floor(ageHours / 24);
+                      return (
+                        <Badge variant="outline" className={overSla ? 'border-red-500/40 text-red-600' : 'text-muted-foreground'}>
+                          {ageDays > 0 ? `${ageDays}d old` : `${Math.round(ageHours)}h old`}{overSla ? ' — overdue' : ''}
+                        </Badge>
+                      );
+                    })()}
                     <Badge className={getPriorityColor(dispute.priority)}>
                       {dispute.priority}
                     </Badge>

@@ -6,12 +6,27 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Listing = require('../models/Listing');
+const Booking = require('../models/Booking');
 const mongoose = require('mongoose');
+const { upload } = require('../middleware/upload');
+const { uploadToCloudinary } = require('../services/uploadService');
+
+// True if either participant has blocked the other — checked before a
+// conversation/message can be created, see docs/redesign/06-messages.md.
+const isBlockedPair = async (userIdA, userIdB) => {
+  const [a, b] = await Promise.all([
+    User.findById(userIdA).select('blockedUsers'),
+    User.findById(userIdB).select('blockedUsers')
+  ]);
+  const aBlockedB = a?.blockedUsers?.some((id) => id.toString() === userIdB.toString());
+  const bBlockedA = b?.blockedUsers?.some((id) => id.toString() === userIdA.toString());
+  return !!(aBlockedB || bBlockedA);
+};
 
 // @route   GET /api/v1/messages (get all conversations for current user only)
 router.get('/', protect, asyncHandler(async (req, res) => {
   const userId = new mongoose.Types.ObjectId(req.user._id);
-  
+
   const conversations = await Conversation.find({
     participants: userId
   })
@@ -20,12 +35,33 @@ router.get('/', protect, asyncHandler(async (req, res) => {
     .populate('lastMessage.sender', 'fullName')
     .sort({ updatedAt: -1 });
 
-  // Add unread count for current user
-  const conversationsWithUnread = conversations.map(conv => {
+  // Attach a "Booking #..." chip when a booking exists between these two
+  // participants for this conversation's listing, so a thread visually
+  // distinguishes pre-booking inquiry from post-booking coordination.
+  const conversationsWithUnread = await Promise.all(conversations.map(async (conv) => {
     const convObj = conv.toObject();
     convObj.unreadCount = conv.unreadCount?.get(req.user._id.toString()) || 0;
+
+    if (conv.listing) {
+      const otherParticipant = conv.participants.find(
+        (p) => p._id.toString() !== req.user._id.toString()
+      );
+      if (otherParticipant) {
+        const booking = await Booking.findOne({
+          listing: conv.listing._id || conv.listing,
+          $or: [
+            { renter: req.user._id, owner: otherParticipant._id },
+            { renter: otherParticipant._id, owner: req.user._id }
+          ]
+        }).select('bookingId status').sort({ createdAt: -1 });
+        if (booking) {
+          convObj.booking = { _id: booking._id, bookingId: booking.bookingId, status: booking.status };
+        }
+      }
+    }
+
     return convObj;
-  });
+  }));
 
   res.json({ success: true, data: conversationsWithUnread });
 }));
@@ -77,6 +113,10 @@ router.post('/', protect, asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Participant ID is required' });
   }
 
+  if (await isBlockedPair(req.user._id, participantId)) {
+    return res.status(403).json({ success: false, message: 'You cannot message this user' });
+  }
+
   // Check if conversation exists
   let conversation = await Conversation.findOne({
     participants: { $all: [req.user._id, participantId] },
@@ -124,15 +164,15 @@ router.post('/', protect, asyncHandler(async (req, res) => {
 }));
 
 // @route   POST /api/v1/messages/:id/messages
-router.post('/:id/messages', protect, asyncHandler(async (req, res) => {
+router.post('/:id/messages', protect, upload.array('images', 5), asyncHandler(async (req, res) => {
   const { content } = req.body;
 
-  if (!content) {
-    return res.status(400).json({ success: false, message: 'Message content is required' });
+  if (!content && !req.files?.length) {
+    return res.status(400).json({ success: false, message: 'Message content or an attachment is required' });
   }
 
   const conversation = await Conversation.findById(req.params.id);
-  
+
   if (!conversation) {
     return res.status(404).json({ success: false, message: 'Conversation not found' });
   }
@@ -142,15 +182,36 @@ router.post('/:id/messages', protect, asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: 'Not authorized' });
   }
 
+  const otherParticipant = conversation.participants.find(
+    (p) => p.toString() !== req.user._id.toString()
+  );
+  if (otherParticipant && await isBlockedPair(req.user._id, otherParticipant)) {
+    return res.status(403).json({ success: false, message: 'You cannot message this user' });
+  }
+
+  let attachments = [];
+  if (req.files?.length) {
+    attachments = await Promise.all(req.files.map(async (file) => {
+      try {
+        const result = await uploadToCloudinary(file.buffer, { folder: 'message-attachments' });
+        return { public_id: result.public_id, url: result.secure_url, type: 'image' };
+      } catch (err) {
+        const base64 = file.buffer.toString('base64');
+        return { public_id: `local_${Date.now()}`, url: `data:${file.mimetype};base64,${base64}`, type: 'image' };
+      }
+    }));
+  }
+
   const message = await Message.create({
     conversation: req.params.id,
     sender: req.user._id,
-    content
+    content: content || '',
+    attachments
   });
 
   // Update conversation with last message
   conversation.lastMessage = {
-    content,
+    content: content || (attachments.length ? '📷 Photo' : ''),
     sender: req.user._id,
     createdAt: new Date()
   };

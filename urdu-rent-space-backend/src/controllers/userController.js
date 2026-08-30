@@ -137,6 +137,186 @@ const getUserStats = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Get aggregated dashboard overview (action items, this-month
+//          summary, plan status, recent activity) for the current user's
+//          role — one call instead of the client stitching together 4-5.
+//          See docs/redesign/03-overview-tab.md.
+// @route   GET /api/v1/users/dashboard-overview
+// @access  Private
+const getDashboardOverview = asyncHandler(async (req, res, next) => {
+  const Listing = require('../models/Listing');
+  const Booking = require('../models/Booking');
+  const Conversation = require('../models/Conversation');
+  const Dispute = require('../models/Dispute');
+  const Payment = require('../models/Payment');
+  const Payout = require('../models/Payout');
+  const Review = require('../models/Review');
+  const { getPlan, SUBSCRIPTION_PLANS } = require('../config/subscriptionPlans');
+
+  const user = await User.findById(req.user.id);
+
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  const userId = user._id;
+  const isOwner = user.role === 'owner' || user.role === 'both';
+  const isBorrower = user.role === 'borrower' || user.role === 'both';
+
+  const now = new Date();
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const overview = {};
+
+  if (isOwner) {
+    const NET_EARNINGS_EXPR = { $subtract: ['$amount.subtotal', { $ifNull: ['$amount.commission', 0] }] };
+
+    const [
+      pendingBookings,
+      openDisputes,
+      expiringListings,
+      conversations,
+      activeListingsCount,
+      monthBookingsCreated,
+      monthBookingsCompleted,
+      netEarningsAgg,
+      totalViewsAgg,
+      recentBookingsForActivity,
+      recentPayouts,
+      recentReviews
+    ] = await Promise.all([
+      Booking.countDocuments({ owner: userId, status: 'pending' }),
+      Dispute.countDocuments({ complainant: userId, status: { $nin: ['resolved', 'closed'] } }),
+      Listing.countDocuments({ owner: userId, status: 'active', expiresAt: { $gte: now, $lte: sevenDaysFromNow } }),
+      Conversation.find({ participants: userId }),
+      Listing.countDocuments({ owner: userId, status: 'active' }),
+      Booking.countDocuments({ owner: userId, createdAt: { $gte: thisMonthStart } }),
+      Booking.countDocuments({ owner: userId, status: 'completed', completedAt: { $gte: thisMonthStart } }),
+      Payment.aggregate([
+        { $match: { payee: userId, status: 'completed', createdAt: { $gte: thisMonthStart } } },
+        { $group: { _id: null, net: { $sum: NET_EARNINGS_EXPR } } }
+      ]),
+      Listing.aggregate([
+        { $match: { owner: userId } },
+        { $group: { _id: null, totalViews: { $sum: '$stats.views' } } }
+      ]),
+      Booking.find({ owner: userId }).sort({ createdAt: -1 }).limit(5)
+        .populate('listing', 'title').populate('renter', 'fullName'),
+      Payout.find({ user: userId, status: 'paid' }).sort({ processedAt: -1 }).limit(5),
+      Review.find({ revieweeId: userId }).sort({ createdAt: -1 }).limit(5)
+        .populate('reviewerId', 'fullName')
+    ]);
+
+    const unreadMessages = conversations.reduce(
+      (sum, c) => sum + (c.unreadCount?.get(userId.toString()) || 0),
+      0
+    );
+
+    const plan = getPlan(user.subscription.plan);
+    const monthlyEarnings = netEarningsAgg[0]?.net || 0;
+    const totalViews = totalViewsAgg[0]?.totalViews || 0;
+    // Approximate: view counts are cumulative (not bucketed by month), so this
+    // reads as "this month's inquiries against all-time listing views," not a
+    // strict monthly funnel. Good enough as a directional signal.
+    const conversionRate = totalViews > 0
+      ? Math.round((monthBookingsCreated / totalViews) * 1000) / 10
+      : 0;
+
+    const planOrder = ['free', 'plus', 'pro', 'business'];
+    const currentPlanIndex = planOrder.indexOf(plan.id);
+    let upgradeNudge = null;
+    if (currentPlanIndex !== -1 && currentPlanIndex < planOrder.length - 1 && monthlyEarnings > 0) {
+      const nextPlan = SUBSCRIPTION_PLANS[planOrder[currentPlanIndex + 1]];
+      const grossSubtotal = monthlyEarnings / (1 - plan.commissionRate);
+      const estimatedMonthlySavings = Math.round(
+        grossSubtotal * plan.commissionRate - grossSubtotal * nextPlan.commissionRate
+      );
+      if (estimatedMonthlySavings > 0) {
+        upgradeNudge = {
+          nextPlan: nextPlan.id,
+          nextPlanName: nextPlan.name,
+          estimatedMonthlySavings
+        };
+      }
+    }
+
+    const activity = [];
+    recentBookingsForActivity.forEach((b) => activity.push({
+      type: 'booking',
+      message: `${b.renter?.fullName || 'A renter'} ${b.status === 'completed' ? 'completed a rental of' : 'requested to book'} "${b.listing?.title || 'your listing'}"`,
+      date: b.completedAt || b.createdAt
+    }));
+    recentPayouts.forEach((p) => activity.push({
+      type: 'payout',
+      message: `Payout of PKR ${p.amount.toLocaleString()} sent`,
+      date: p.processedAt || p.requestedAt
+    }));
+    recentReviews.forEach((r) => activity.push({
+      type: 'review',
+      message: `${r.reviewerId?.fullName || 'Someone'} left a ${r.rating}-star review`,
+      date: r.createdAt
+    }));
+    activity.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    overview.owner = {
+      actionNeeded: {
+        pendingBookings,
+        unreadMessages,
+        openDisputes,
+        expiringListings,
+        verificationLevel: user.verificationLevel
+      },
+      thisMonth: {
+        earnings: monthlyEarnings,
+        bookingsCompleted: monthBookingsCompleted,
+        newInquiries: monthBookingsCreated,
+        conversionRate
+      },
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        listingsUsed: activeListingsCount,
+        maxListings: plan.maxListings,
+        atListingLimit: plan.maxListings !== -1 && activeListingsCount >= plan.maxListings,
+        featuredCredits: user.subscription.featuredCredits,
+        commissionRate: user.subscription.commissionRate,
+        upgradeNudge
+      },
+      recentActivity: activity.slice(0, 10)
+    };
+  }
+
+  if (isBorrower) {
+    const [upcomingBookings, conversations, userWithFavorites] = await Promise.all([
+      Booking.find({ renter: userId, status: 'approved', startDate: { $gte: now } })
+        .sort({ startDate: 1 })
+        .limit(5)
+        .populate('listing', 'title images location'),
+      Conversation.find({ participants: userId }),
+      User.findById(userId).populate({
+        path: 'favorites',
+        select: 'title images pricing status'
+      })
+    ]);
+
+    const activeConversationsNeedingReply = conversations.filter(
+      (c) => (c.unreadCount?.get(userId.toString()) || 0) > 0
+    ).length;
+
+    overview.borrower = {
+      upcomingBookings,
+      activeConversationsNeedingReply,
+      savedListings: (userWithFavorites?.favorites || []).slice(0, 6)
+    };
+  }
+
+  res.status(200).json({
+    success: true,
+    data: overview
+  });
+});
+
 // @desc    Get public user profile
 // @route   GET /api/v1/users/:id
 // @access  Public
@@ -412,6 +592,60 @@ const addReview = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Toggle blocking a user (marketplace safety control — see
+//          docs/redesign/06-messages.md). A blocked user can't message you
+//          or start a new conversation with you.
+// @route   POST /api/v1/users/:id/block
+// @access  Private
+const toggleBlock = asyncHandler(async (req, res, next) => {
+  if (req.params.id === req.user.id) {
+    return next(new ErrorResponse('Cannot block yourself', 400));
+  }
+
+  const user = await User.findById(req.user.id);
+  const idx = user.blockedUsers.findIndex((id) => id.toString() === req.params.id);
+  let blocked;
+  if (idx === -1) {
+    user.blockedUsers.push(req.params.id);
+    blocked = true;
+  } else {
+    user.blockedUsers.splice(idx, 1);
+    blocked = false;
+  }
+  await user.save({ validateBeforeSave: false });
+
+  res.json({ success: true, data: { blocked } });
+});
+
+// @desc    Report a user (e.g. from a conversation) — feeds the admin
+//          moderation queue. See docs/redesign/06-messages.md and
+//          11-admin-panel.md.
+// @route   POST /api/v1/users/:id/report
+// @access  Private
+const reportUser = asyncHandler(async (req, res, next) => {
+  const { reason, description, conversationId } = req.body;
+
+  if (!reason) {
+    return next(new ErrorResponse('A reason is required', 400));
+  }
+
+  const reportedUser = await User.findById(req.params.id);
+  if (!reportedUser) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  reportedUser.reports.push({
+    reportedBy: req.user.id,
+    reason,
+    description,
+    conversationId: conversationId || undefined,
+    createdAt: new Date()
+  });
+  await reportedUser.save({ validateBeforeSave: false });
+
+  res.status(201).json({ success: true, message: 'Report submitted. Our team will review it.' });
+});
+
 // @desc    Search users for dispute filing
 // @route   GET /api/v1/users/search
 // @access  Private
@@ -448,11 +682,14 @@ module.exports = {
   getProfile,
   updateProfile,
   getUserStats,
+  getDashboardOverview,
   getPublicProfile,
   getVerificationStatus,
   uploadIDDocument,
   verifyBiometric,
   getReviews,
   addReview,
-  searchUsers
+  searchUsers,
+  toggleBlock,
+  reportUser
 };

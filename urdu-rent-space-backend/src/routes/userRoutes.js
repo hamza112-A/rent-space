@@ -3,13 +3,16 @@ const {
   getProfile,
   updateProfile,
   getUserStats,
+  getDashboardOverview,
   getPublicProfile,
   getVerificationStatus,
   uploadIDDocument,
   verifyBiometric,
   getReviews,
   addReview,
-  searchUsers
+  searchUsers,
+  toggleBlock,
+  reportUser
 } = require('../controllers/userController');
 const { protect, requireEmailVerification, requirePhoneVerification } = require('../middleware/auth');
 const { uploadMultiple } = require('../middleware/upload');
@@ -23,9 +26,14 @@ router.use(protect);
 router.get('/profile', getProfile);
 router.patch('/profile', uploadMultiple.single('avatar'), updateProfile);
 router.get('/stats', getUserStats);
+router.get('/dashboard-overview', getDashboardOverview);
 
 // Search users (for disputes, messages, etc.)
 router.get('/search', searchUsers);
+
+// Safety controls (see docs/redesign/06-messages.md)
+router.post('/:id/block', toggleBlock);
+router.post('/:id/report', reportUser);
 
 // Verification routes
 router.get('/verification', getVerificationStatus);

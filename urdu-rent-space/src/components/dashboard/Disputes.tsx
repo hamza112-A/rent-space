@@ -16,6 +16,9 @@ import {
   CheckCircle2,
   DollarSign,
   Activity,
+  Upload,
+  X,
+  Circle,
 } from 'lucide-react';
 import {
   Dialog,
@@ -88,6 +91,7 @@ interface Dispute {
   booking?: { bookingId: string };
   listing?: { title: string };
   createdAt: string;
+  evidence?: { type: string; url: string; description?: string }[];
   requestedAmount?: number;
   awardedAmount?: number;
   messages: DisputeMessage[];
@@ -96,6 +100,28 @@ interface Dispute {
   resolution?: { decision?: string; explanation?: string; action?: string; resolvedAt?: string };
   assignedTo?: { fullName: string };
 }
+
+const CATEGORY_INFO: Record<string, string> = {
+  payment_issue: 'Payment was charged incorrectly, failed, or wasn\'t received.',
+  property_condition: 'The listing didn\'t match its description or was unsafe/damaged.',
+  cancellation_dispute: 'Disagreement over a cancellation or its refund.',
+  damage_claim: 'Item/space was damaged during the rental period.',
+  refund_request: 'You believe you\'re owed a refund not covered by another category.',
+  behavior_issue: 'Rude, unprofessional, or inappropriate conduct by the other party.',
+  safety_concern: 'A safety risk to you or others during the rental.',
+  fraudulent_activity: 'Suspected scam, fake listing, or identity fraud.',
+  breach_of_terms: 'The other party didn\'t follow agreed booking terms.',
+  other: 'Anything that doesn\'t fit the categories above.',
+};
+
+const STATUS_STEPS = ['submitted', 'under_review', 'investigating', 'resolved'];
+
+const PRIORITY_SLA: Record<string, string> = {
+  urgent: 'typically responded to within 24 hours',
+  high: 'typically responded to within 1-2 days',
+  medium: 'typically resolved within 3-5 business days',
+  low: 'typically resolved within 5-7 business days',
+};
 
 const Disputes: React.FC = () => {
   const { user } = useAuth();
@@ -124,10 +150,36 @@ const Disputes: React.FC = () => {
     description: '',
     requestedAmount: '',
   });
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
 
   useEffect(() => {
     if (user) fetchDisputes();
   }, [user]);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem('dispute_prefill');
+    if (!raw) return;
+    sessionStorage.removeItem('dispute_prefill');
+    try {
+      const prefill = JSON.parse(raw);
+      setFormData((prev) => ({
+        ...prev,
+        bookingId: prefill.bookingCode || prefill.bookingId || '',
+        subject: prefill.listingTitle ? `Issue with "${prefill.listingTitle}"` : prev.subject,
+      }));
+      if (prefill.respondentId) {
+        setSelectedUser({
+          _id: prefill.respondentId,
+          fullName: prefill.respondentName || 'User',
+          email: '',
+          role: '',
+        });
+      }
+      setShowCreateDialog(true);
+    } catch {
+      // ignore malformed prefill
+    }
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -179,17 +231,20 @@ const Disputes: React.FC = () => {
       return;
     }
     try {
-      await api.post('/disputes', {
-        respondentId: selectedUser._id,
-        bookingId: formData.bookingId || undefined,
-        category: formData.category,
-        subject: formData.subject,
-        description: formData.description,
-        requestedAmount: formData.requestedAmount ? parseFloat(formData.requestedAmount) : undefined,
-      });
+      const payload = new FormData();
+      payload.append('respondentId', selectedUser._id);
+      if (formData.bookingId) payload.append('bookingId', formData.bookingId);
+      payload.append('category', formData.category);
+      payload.append('subject', formData.subject);
+      payload.append('description', formData.description);
+      if (formData.requestedAmount) payload.append('requestedAmount', formData.requestedAmount);
+      evidenceFiles.forEach((f) => payload.append('evidence', f));
+
+      await api.post('/disputes', payload, { headers: { 'Content-Type': 'multipart/form-data' } });
       toast({ title: 'Success', description: 'Dispute submitted. Our team will review it shortly.' });
       setShowCreateDialog(false);
       setFormData({ bookingId: '', category: '', subject: '', description: '', requestedAmount: '' });
+      setEvidenceFiles([]);
       setSelectedUser(null);
       setUserSearchQuery('');
       fetchDisputes();
@@ -343,6 +398,9 @@ const Disputes: React.FC = () => {
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
+                {formData.category && (
+                  <p className="text-xs text-muted-foreground">{CATEGORY_INFO[formData.category]}</p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -359,6 +417,45 @@ const Disputes: React.FC = () => {
               <div className="space-y-2">
                 <Label htmlFor="requestedAmount">Requested Amount PKR (Optional)</Label>
                 <Input id="requestedAmount" type="number" min="0" value={formData.requestedAmount} onChange={(e) => setFormData({ ...formData, requestedAmount: e.target.value })} placeholder="0" />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Evidence (photos, strongly encouraged)</Label>
+                <label className="flex items-center justify-center gap-2 border border-dashed rounded-lg p-4 cursor-pointer text-sm text-muted-foreground hover:bg-muted/50">
+                  <Upload className="h-4 w-4" />
+                  Add photos to support your case
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []).slice(0, 5 - evidenceFiles.length);
+                      setEvidenceFiles((prev) => [...prev, ...files].slice(0, 5));
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                {evidenceFiles.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {evidenceFiles.map((file, idx) => (
+                      <div key={idx} className="relative">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="h-16 w-full rounded object-cover border"
+                        />
+                        <button
+                          type="button"
+                          className="absolute -top-1.5 -right-1.5 bg-background border rounded-full p-0.5"
+                          onClick={() => setEvidenceFiles((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <DialogFooter>
@@ -477,6 +574,59 @@ const Disputes: React.FC = () => {
 
               <ScrollArea className="h-[65vh] pr-4">
                 <div className="space-y-6">
+                  {/* Status stepper */}
+                  {!['closed', 'escalated'].includes(selectedDispute.status) && (
+                    <div className="flex items-center">
+                      {STATUS_STEPS.map((step, idx) => {
+                        const currentIdx = STATUS_STEPS.indexOf(selectedDispute.status);
+                        const reached = currentIdx >= idx;
+                        return (
+                          <React.Fragment key={step}>
+                            <div className="flex flex-col items-center gap-1">
+                              {reached ? (
+                                <CheckCircle2 className="h-5 w-5 text-primary" />
+                              ) : (
+                                <Circle className="h-5 w-5 text-muted-foreground/40" />
+                              )}
+                              <span className={`text-[10px] text-center capitalize ${reached ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                                {step.replace(/_/g, ' ')}
+                              </span>
+                            </div>
+                            {idx < STATUS_STEPS.length - 1 && (
+                              <div className={`flex-1 h-0.5 mx-1 ${currentIdx > idx ? 'bg-primary' : 'bg-muted'}`} />
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {!['resolved', 'closed'].includes(selectedDispute.status) && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      {selectedDispute.priority ? `This is a ${selectedDispute.priority}-priority case — ` : ''}
+                      {PRIORITY_SLA[selectedDispute.priority] || 'typically resolved within a few business days'}.
+                    </p>
+                  )}
+
+                  {/* Evidence */}
+                  {selectedDispute.evidence && selectedDispute.evidence.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Evidence</CardTitle></CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-4 gap-2">
+                          {selectedDispute.evidence.map((e, idx) => (
+                            <img
+                              key={idx}
+                              src={e.url}
+                              alt={e.description || 'evidence'}
+                              className="h-16 w-full rounded object-cover border cursor-pointer"
+                              onClick={() => window.open(e.url, '_blank')}
+                            />
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Parties */}
                   <div className="grid grid-cols-2 gap-4">
                     <Card>
