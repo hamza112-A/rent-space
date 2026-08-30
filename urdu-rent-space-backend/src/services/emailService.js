@@ -1,22 +1,8 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const path = require('path');
 const fs = require('fs').promises;
 
-// Create reusable transporter object using SMTP transport
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT || 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-};
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * Load email template
@@ -65,8 +51,6 @@ const loadTemplate = async (templateName, data = {}) => {
  */
 const sendEmail = async (options) => {
   try {
-    const transporter = createTransporter();
-
     let html = options.html;
 
     // If template is specified, load and render it
@@ -75,30 +59,32 @@ const sendEmail = async (options) => {
     }
 
     const mailOptions = {
-      from: `"Urdu Rent Space" <${process.env.EMAIL_FROM}>`,
+      from: `Urdu Rent Space <${process.env.EMAIL_FROM}>`,
       to: options.to,
       subject: options.subject,
       text: options.text,
-      html: html,
-      attachments: options.attachments || []
+      html: html
     };
 
-    // Add CC and BCC if provided
+    if (options.attachments?.length) mailOptions.attachments = options.attachments;
     if (options.cc) mailOptions.cc = options.cc;
     if (options.bcc) mailOptions.bcc = options.bcc;
 
-    const result = await transporter.sendMail(mailOptions);
+    const { data, error } = await resend.emails.send(mailOptions);
+
+    if (error) {
+      throw new Error(error.message || 'Resend API error');
+    }
 
     console.log('Email sent successfully:', {
       to: options.to,
       subject: options.subject,
-      messageId: result.messageId
+      messageId: data.id
     });
 
     return {
       success: true,
-      messageId: result.messageId,
-      response: result.response
+      messageId: data.id
     };
 
   } catch (error) {
@@ -307,9 +293,12 @@ const sendNotificationEmail = async (user, notification) => {
  */
 const testEmailConfig = async () => {
   try {
-    const transporter = createTransporter();
-    await transporter.verify();
-    
+    const { error } = await resend.domains.list();
+
+    if (error) {
+      throw new Error(error.message || 'Resend API error');
+    }
+
     return {
       success: true,
       message: 'Email configuration is valid'
