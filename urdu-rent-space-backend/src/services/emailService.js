@@ -1,8 +1,8 @@
-const { Resend } = require('resend');
+const sgMail = require('@sendgrid/mail');
 const path = require('path');
 const fs = require('fs').promises;
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 /**
  * Load email template
@@ -59,7 +59,7 @@ const sendEmail = async (options) => {
     }
 
     const mailOptions = {
-      from: `Urdu Rent Space <${process.env.EMAIL_FROM}>`,
+      from: { email: process.env.EMAIL_FROM, name: 'Urdu Rent Space' },
       to: options.to,
       subject: options.subject,
       text: options.text,
@@ -70,21 +70,18 @@ const sendEmail = async (options) => {
     if (options.cc) mailOptions.cc = options.cc;
     if (options.bcc) mailOptions.bcc = options.bcc;
 
-    const { data, error } = await resend.emails.send(mailOptions);
-
-    if (error) {
-      throw new Error(error.message || 'Resend API error');
-    }
+    const [response] = await sgMail.send(mailOptions);
+    const messageId = response.headers['x-message-id'];
 
     console.log('Email sent successfully:', {
       to: options.to,
       subject: options.subject,
-      messageId: data.id
+      messageId
     });
 
     return {
       success: true,
-      messageId: data.id
+      messageId
     };
 
   } catch (error) {
@@ -293,10 +290,11 @@ const sendNotificationEmail = async (user, notification) => {
  */
 const testEmailConfig = async () => {
   try {
-    const { error } = await resend.domains.list();
-
-    if (error) {
-      throw new Error(error.message || 'Resend API error');
+    if (!process.env.SENDGRID_API_KEY) {
+      throw new Error('SENDGRID_API_KEY is not set');
+    }
+    if (!process.env.EMAIL_FROM) {
+      throw new Error('EMAIL_FROM is not set');
     }
 
     return {
