@@ -1,20 +1,22 @@
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { authApi } from '@/lib/api';
 import { Mail, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { forgotPasswordSchema, type ForgotPasswordFormValues } from '@/lib/validation/auth';
+import { getApiErrorMessage } from '@/lib/errors';
 
 const ForgotPassword = () => {
   const { language } = useLanguage();
-  const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
+  const [submitError, setSubmitError] = useState('');
 
   const t = {
     en: {
@@ -51,47 +53,33 @@ const ForgotPassword = () => {
 
   const text = t[language as keyof typeof t] || t.en;
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+  const form = useForm<ForgotPasswordFormValues>({
+    resolver: zodResolver(forgotPasswordSchema),
+    defaultValues: { email: '' },
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (!validateEmail(email)) {
-      setError(text.invalidEmail);
-      return;
-    }
-
-    setIsLoading(true);
-
+  const onSubmit = async (values: ForgotPasswordFormValues) => {
+    setSubmitError('');
     try {
-      await authApi.forgotPassword(email);
+      await authApi.forgotPassword(values.email);
       setSuccess(true);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Forgot password error:', err);
-      setError(err?.response?.data?.error?.message || text.errorMessage);
-    } finally {
-      setIsLoading(false);
+      setSubmitError(getApiErrorMessage(err, text.errorMessage));
     }
   };
 
   const handleResend = async () => {
-    setError('');
-    setIsLoading(true);
-
+    setSubmitError('');
     try {
-      await authApi.forgotPassword(email);
-      setError('');
-    } catch (err: any) {
+      await authApi.forgotPassword(form.getValues('email'));
+    } catch (err) {
       console.error('Resend error:', err);
-      setError(err?.response?.data?.error?.message || text.errorMessage);
-    } finally {
-      setIsLoading(false);
+      setSubmitError(getApiErrorMessage(err, text.errorMessage));
     }
   };
+
+  const isLoading = form.formState.isSubmitting;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-4">
@@ -117,14 +105,16 @@ const ForgotPassword = () => {
                 </AlertDescription>
               </Alert>
 
+              {submitError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{submitError}</AlertDescription>
+                </Alert>
+              )}
+
               <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <span>{text.didntReceive}</span>
-                <Button
-                  variant="link"
-                  className="p-0 h-auto"
-                  onClick={handleResend}
-                  disabled={isLoading}
-                >
+                <Button variant="link" className="p-0 h-auto" onClick={handleResend} disabled={isLoading}>
                   {text.resend}
                 </Button>
               </div>
@@ -136,39 +126,43 @@ const ForgotPassword = () => {
               </Link>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {submitError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{submitError}</AlertDescription>
+                  </Alert>
+                )}
 
-              <div className="space-y-2">
-                <Label htmlFor="email">{text.emailLabel}</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder={text.emailPlaceholder}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{text.emailLabel}</FormLabel>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder={text.emailPlaceholder}
+                            className="pl-10"
+                            disabled={isLoading}
+                            {...field}
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading || !email}
-              >
-                {isLoading ? text.submittingButton : text.submitButton}
-              </Button>
-            </form>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? text.submittingButton : text.submitButton}
+                </Button>
+              </form>
+            </Form>
           )}
         </CardContent>
       </Card>

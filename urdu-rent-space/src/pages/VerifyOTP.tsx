@@ -1,21 +1,30 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Form, FormField, FormItem, FormMessage } from '@/components/ui/form';
 import { toast } from 'sonner';
 import { ArrowLeft, Mail, Phone, RefreshCw } from 'lucide-react';
 import { authApi } from '@/lib/api';
+import { verifyOtpSchema, type VerifyOtpFormValues } from '@/lib/validation/auth';
+import { getApiErrorMessage } from '@/lib/errors';
 
 const VerifyOTP: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(30);
   const [verifyMethod, setVerifyMethod] = useState<'email' | 'phone'>('email');
   const [userInfo, setUserInfo] = useState<{ userId: string; email: string; phone: string; role: string } | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const form = useForm<VerifyOtpFormValues>({
+    resolver: zodResolver(verifyOtpSchema),
+    defaultValues: { otp: '' },
+  });
 
   useEffect(() => {
     // Get pending verification info from localStorage
@@ -35,6 +44,11 @@ const VerifyOTP: React.FC = () => {
     }
   }, [resendCooldown]);
 
+  const setOtpValue = (newOtp: string[]) => {
+    setOtp(newOtp);
+    form.setValue('otp', newOtp.join(''), { shouldValidate: form.formState.isSubmitted });
+  };
+
   const handleChange = (index: number, value: string) => {
     if (value.length > 1) {
       // Handle paste
@@ -45,7 +59,7 @@ const VerifyOTP: React.FC = () => {
           newOtp[index + i] = digit;
         }
       });
-      setOtp(newOtp);
+      setOtpValue(newOtp);
       const nextIndex = Math.min(index + digits.length, 5);
       inputRefs.current[nextIndex]?.focus();
       return;
@@ -55,7 +69,7 @@ const VerifyOTP: React.FC = () => {
 
     const newOtp = [...otp];
     newOtp[index] = value;
-    setOtp(newOtp);
+    setOtpValue(newOtp);
 
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
@@ -68,45 +82,34 @@ const VerifyOTP: React.FC = () => {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = otp.join('');
-    if (code.length !== 6) {
-      toast.error('Please enter the complete 6-digit code');
-      return;
-    }
-
+  const onSubmit = async (values: VerifyOtpFormValues) => {
     if (!userInfo) {
       toast.error('User information not found');
       return;
     }
 
-    setIsLoading(true);
     try {
       await authApi.verifyOTP({
         userId: userInfo.userId,
-        otp: code,
+        otp: values.otp,
         type: verifyMethod,
       });
-      
+
       // Clear pending verification
       localStorage.removeItem('pendingVerification');
 
       toast.success('Verification successful!');
       navigate('/dashboard');
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Invalid OTP. Please try again.';
-      toast.error(message);
-      setOtp(['', '', '', '', '', '']);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Invalid OTP. Please try again.'));
+      setOtpValue(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleResend = async () => {
     if (resendCooldown > 0 || !userInfo) return;
-    
+
     try {
       await authApi.resendOTP({
         userId: userInfo.userId,
@@ -114,16 +117,17 @@ const VerifyOTP: React.FC = () => {
       });
       setResendCooldown(30);
       toast.success(`New OTP sent to your ${verifyMethod}`);
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to resend OTP';
-      toast.error(message);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Failed to resend OTP'));
     }
   };
 
-  const maskedEmail = userInfo?.email 
+  const isLoading = form.formState.isSubmitting;
+
+  const maskedEmail = userInfo?.email
     ? userInfo.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')
     : 'your@email.com';
-  
+
   const maskedPhone = userInfo?.phone
     ? userInfo.phone.replace(/(\+\d{2}\s?\d{3})\s?\d+(\d{3})/, '$1 ****$2')
     : '+92 300 ****567';
@@ -178,42 +182,53 @@ const VerifyOTP: React.FC = () => {
               </Button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="flex justify-center gap-3">
-                {otp.map((digit, index) => (
-                  <input
-                    key={index}
-                    ref={(el) => (inputRefs.current[index] = el)}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={digit}
-                    onChange={(e) => handleChange(index, e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(index, e)}
-                    className="w-12 h-14 text-center text-2xl font-bold rounded-xl border-2 border-border bg-muted/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                    autoFocus={index === 0}
-                  />
-                ))}
-              </div>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="otp"
+                  render={() => (
+                    <FormItem>
+                      <div className="flex justify-center gap-3">
+                        {otp.map((digit, index) => (
+                          <input
+                            key={index}
+                            ref={(el) => (inputRefs.current[index] = el)}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={digit}
+                            onChange={(e) => handleChange(index, e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(index, e)}
+                            className="w-12 h-14 text-center text-2xl font-bold rounded-xl border-2 border-border bg-muted/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                            autoFocus={index === 0}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage className="text-center" />
+                    </FormItem>
+                  )}
+                />
 
-              <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
-                {isLoading ? t.common.loading : 'Verify & Continue'}
-              </Button>
-
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground mb-2">Didn't receive the code?</p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={handleResend}
-                  disabled={resendCooldown > 0}
-                  className="gap-2"
-                >
-                  <RefreshCw className={`w-4 h-4 ${resendCooldown > 0 ? 'animate-spin' : ''}`} />
-                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : t.auth.resendOTP}
+                <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+                  {isLoading ? t.common.loading : 'Verify & Continue'}
                 </Button>
-              </div>
-            </form>
+
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground mb-2">Didn't receive the code?</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={handleResend}
+                    disabled={resendCooldown > 0}
+                    className="gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${resendCooldown > 0 ? 'animate-spin' : ''}`} />
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : t.auth.resendOTP}
+                  </Button>
+                </div>
+              </form>
+            </Form>
 
             <div className="mt-6 p-4 rounded-lg bg-muted/50">
               <h4 className="font-medium text-sm mb-2">Verification Tips</h4>

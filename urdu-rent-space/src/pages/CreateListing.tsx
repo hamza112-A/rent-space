@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { listingApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,7 +15,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { categories } from '@/lib/categories';
+import { categoryFields } from '@/lib/categoryFields';
+import { listingSchema, LISTING_STEP_FIELDS, type ListingFormValues } from '@/lib/validation/listing';
+import { getApiErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import {
   Select,
@@ -29,7 +35,6 @@ import {
   X,
   MapPin,
   DollarSign,
-  Calendar as CalendarIcon,
   CheckCircle2,
   Image as ImageIcon,
   Zap,
@@ -41,6 +46,7 @@ import {
   Dog,
   Ship,
   Plane,
+  Loader2,
 } from 'lucide-react';
 
 const categoryIcons: Record<string, React.ElementType> = {
@@ -54,74 +60,22 @@ const categoryIcons: Record<string, React.ElementType> = {
   air: Plane,
 };
 
-// Dynamic fields based on category
-const categoryFields: Record<string, { name: string; type: string; options?: string[]; required?: boolean }[]> = {
-  property: [
-    { name: 'bedrooms', type: 'select', options: ['1', '2', '3', '4', '5+'], required: true },
-    { name: 'bathrooms', type: 'select', options: ['1', '2', '3', '4+'], required: true },
-    { name: 'area', type: 'number', required: true },
-    { name: 'furnishing', type: 'select', options: ['Unfurnished', 'Semi-Furnished', 'Fully Furnished'], required: true },
-    { name: 'floor', type: 'number' },
-    { name: 'parking', type: 'checkbox' },
-    { name: 'wifi', type: 'checkbox' },
-    { name: 'airConditioned', type: 'checkbox' },
-  ],
-  vehicles: [
-    { name: 'make', type: 'text', required: true },
-    { name: 'model', type: 'text', required: true },
-    { name: 'year', type: 'number', required: true },
-    { name: 'transmission', type: 'select', options: ['Automatic', 'Manual'], required: true },
-    { name: 'fuelType', type: 'select', options: ['Petrol', 'Diesel', 'Hybrid', 'Electric', 'CNG'] },
-    { name: 'seats', type: 'number' },
-    { name: 'withDriver', type: 'checkbox' },
-    { name: 'insurance', type: 'checkbox' },
-  ],
-  clothes: [
-    { name: 'size', type: 'select', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'Custom'], required: true },
-    { name: 'color', type: 'text', required: true },
-    { name: 'material', type: 'text' },
-    { name: 'brand', type: 'text' },
-    { name: 'condition', type: 'select', options: ['New', 'Like New', 'Good', 'Fair'], required: true },
-    { name: 'dryCleaningIncluded', type: 'checkbox' },
-  ],
-  equipment: [
-    { name: 'brand', type: 'text' },
-    { name: 'model', type: 'text' },
-    { name: 'condition', type: 'select', options: ['New', 'Like New', 'Good', 'Fair'], required: true },
-    { name: 'warranty', type: 'checkbox' },
-    { name: 'deliveryAvailable', type: 'checkbox' },
-    { name: 'setupIncluded', type: 'checkbox' },
-  ],
-  services: [
-    { name: 'experience', type: 'select', options: ['<1 year', '1-3 years', '3-5 years', '5-10 years', '10+ years'], required: true },
-    { name: 'certifications', type: 'text' },
-    { name: 'languages', type: 'text' },
-    { name: 'availability', type: 'select', options: ['Full-time', 'Part-time', 'On-call', 'Weekends only'] },
-    { name: 'travelWilling', type: 'checkbox' },
-  ],
-  animals: [
-    { name: 'species', type: 'text', required: true },
-    { name: 'breed', type: 'text', required: true },
-    { name: 'age', type: 'text' },
-    { name: 'vaccinated', type: 'checkbox' },
-    { name: 'trained', type: 'checkbox' },
-    { name: 'healthCertificate', type: 'checkbox' },
-  ],
-  boats: [
-    { name: 'type', type: 'text', required: true },
-    { name: 'length', type: 'number' },
-    { name: 'capacity', type: 'number', required: true },
-    { name: 'withCrew', type: 'checkbox' },
-    { name: 'fuelIncluded', type: 'checkbox' },
-    { name: 'safetyEquipment', type: 'checkbox' },
-  ],
-  air: [
-    { name: 'aircraftType', type: 'text', required: true },
-    { name: 'passengerCapacity', type: 'number', required: true },
-    { name: 'range', type: 'text' },
-    { name: 'withPilot', type: 'checkbox' },
-    { name: 'cateringAvailable', type: 'checkbox' },
-  ],
+const DEFAULT_VALUES: ListingFormValues = {
+  category: '',
+  subcategory: '',
+  title: '',
+  description: '',
+  city: '',
+  location: '',
+  images: 0,
+  hourlyRate: '',
+  dailyRate: '',
+  weeklyRate: '',
+  monthlyRate: '',
+  deposit: '',
+  cancellationPolicy: 'flexible',
+  instantBook: false,
+  dynamicFields: {},
 };
 
 const CreateListing: React.FC = () => {
@@ -130,34 +84,31 @@ const CreateListing: React.FC = () => {
   const navigate = useNavigate();
   const { listingId } = useParams<{ listingId: string }>();
   const isEditMode = !!listingId;
-  
+
   const [step, setStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
   const [isLoadingListing, setIsLoadingListing] = useState(isEditMode);
   const [images, setImages] = useState<string[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [unavailableDates, setUnavailableDates] = useState<Date[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const [formData, setFormData] = useState({
-    category: '',
-    subcategory: '',
-    title: '',
-    description: '',
-    location: '',
-    city: '',
-    hourlyRate: '',
-    dailyRate: '',
-    weeklyRate: '',
-    monthlyRate: '',
-    instantBook: false,
-    deposit: '',
-    cancellationPolicy: 'flexible',
-    dynamicFields: {} as Record<string, string | boolean>,
+  const form = useForm<ListingFormValues>({
+    resolver: zodResolver(listingSchema),
+    defaultValues: DEFAULT_VALUES,
   });
 
-  const selectedCategory = categories.find((c) => c.id === formData.category);
-  const dynamicFields = formData.category ? categoryFields[formData.category] || [] : [];
+  const category = form.watch('category');
+  const subcategory = form.watch('subcategory');
+  const dynamicFieldValues = form.watch('dynamicFields');
+  const selectedCategory = categories.find((c) => c.id === category);
+  const dynamicFieldDefs = category ? categoryFields[category] || [] : [];
+
+  // Keep the schema's `images` field (a plain count used only for validation
+  // gating) in sync with the real image state.
+  useEffect(() => {
+    form.setValue('images', images.length, { shouldValidate: form.formState.isSubmitted });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [images.length]);
 
   // Load existing listing data when in edit mode
   useEffect(() => {
@@ -168,21 +119,21 @@ const CreateListing: React.FC = () => {
           const response = await listingApi.getById(listingId);
           const listing = response.data.data;
 
-          // Populate form data
-          setFormData({
+          form.reset({
             category: listing.category || '',
             subcategory: listing.subcategory || '',
             title: listing.title || '',
             description: listing.description || '',
-            location: listing.location?.address || '',
             city: listing.location?.city || '',
+            location: listing.location?.address || '',
+            images: listing.images?.length || 0,
             hourlyRate: listing.pricing?.hourly?.toString() || '',
             dailyRate: listing.pricing?.daily?.toString() || '',
             weeklyRate: listing.pricing?.weekly?.toString() || '',
             monthlyRate: listing.pricing?.monthly?.toString() || '',
-            instantBook: listing.availability?.instantBook || false,
             deposit: listing.policies?.deposit?.amount?.toString() || '',
             cancellationPolicy: listing.policies?.cancellation || 'flexible',
+            instantBook: listing.availability?.instantBook || false,
             dynamicFields: listing.specifications || {},
           });
 
@@ -197,9 +148,9 @@ const CreateListing: React.FC = () => {
           }
 
           setIsLoadingListing(false);
-        } catch (error: any) {
+        } catch (error) {
           console.error('Error loading listing:', error);
-          toast.error(error.response?.data?.message || 'Failed to load listing');
+          toast.error(getApiErrorMessage(error, 'Failed to load listing'));
           setIsLoadingListing(false);
           navigate('/dashboard');
         }
@@ -207,6 +158,7 @@ const CreateListing: React.FC = () => {
 
       loadListing();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditMode, listingId, navigate]);
 
   const handleImageUpload = () => {
@@ -256,50 +208,49 @@ const CreateListing: React.FC = () => {
     setImageFiles(imageFiles.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = async () => {
+  const onSubmit = async (values: ListingFormValues) => {
     if (!isAuthenticated) {
       toast.error('Please login to create a listing');
       navigate('/login');
       return;
     }
 
-    setIsLoading(true);
     try {
       // Build the listing data matching the backend schema
       const listingData = {
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        subcategory: formData.subcategory,
+        title: values.title,
+        description: values.description,
+        category: values.category,
+        subcategory: values.subcategory,
         location: {
-          address: formData.location,
-          city: formData.city,
-          area: formData.location,
+          address: values.location,
+          city: values.city,
+          area: values.location,
         },
         pricing: {
-          hourly: formData.hourlyRate ? Number(formData.hourlyRate) : undefined,
-          daily: formData.dailyRate ? Number(formData.dailyRate) : undefined,
-          weekly: formData.weeklyRate ? Number(formData.weeklyRate) : undefined,
-          monthly: formData.monthlyRate ? Number(formData.monthlyRate) : undefined,
+          hourly: values.hourlyRate ? Number(values.hourlyRate) : undefined,
+          daily: values.dailyRate ? Number(values.dailyRate) : undefined,
+          weekly: values.weeklyRate ? Number(values.weeklyRate) : undefined,
+          monthly: values.monthlyRate ? Number(values.monthlyRate) : undefined,
           currency: 'PKR',
         },
         availability: {
-          instantBook: formData.instantBook,
+          instantBook: values.instantBook,
           blockedDates: unavailableDates,
         },
         policies: {
-          cancellation: formData.cancellationPolicy,
+          cancellation: values.cancellationPolicy,
           deposit: {
-            amount: formData.deposit ? Number(formData.deposit) : 0,
-            required: !!formData.deposit,
+            amount: values.deposit ? Number(values.deposit) : 0,
+            required: !!values.deposit,
           },
         },
-        specifications: formData.dynamicFields,
+        specifications: values.dynamicFields,
       };
 
       // Create FormData for multipart upload (images)
       const submitData = new FormData();
-      
+
       // Append all listing data as JSON
       Object.entries(listingData).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -326,28 +277,27 @@ const CreateListing: React.FC = () => {
       }
 
       navigate('/dashboard');
-    } catch (error: any) {
+    } catch (error) {
       console.error(`Error ${isEditMode ? 'updating' : 'creating'} listing:`, error);
-      const message = error.response?.data?.message || error.message || `Failed to ${isEditMode ? 'update' : 'create'} listing`;
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
+      toast.error(getApiErrorMessage(error, `Failed to ${isEditMode ? 'update' : 'create'} listing`));
     }
   };
 
-  const canProceed = () => {
-    switch (step) {
-      case 1:
-        return formData.category && formData.subcategory;
-      case 2:
-        return formData.title && formData.description && formData.location;
-      case 3:
-        return images.length > 0;
-      case 4:
-        return formData.dailyRate || formData.hourlyRate || formData.weeklyRate || formData.monthlyRate;
-      default:
-        return true;
+  const isLoading = form.formState.isSubmitting;
+
+  const goNext = async () => {
+    let fields = LISTING_STEP_FIELDS[step] || [];
+    if (step === 2) {
+      const requiredDynamic = dynamicFieldDefs.filter((f) => f.required).map((f) => `dynamicFields.${f.name}` as const);
+      fields = [...fields, ...requiredDynamic];
     }
+    const valid = await form.trigger(fields as any);
+    if (valid) setStep(step + 1);
+  };
+
+  const onInvalidSubmit = () => {
+    toast.error('Please check the form for missing or invalid fields.');
+    setStep(1);
   };
 
   return (
@@ -372,456 +322,520 @@ const CreateListing: React.FC = () => {
           {isLoadingListing ? (
             <div className="flex items-center justify-center py-20">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
                 <p className="text-muted-foreground">Loading listing...</p>
               </div>
             </div>
           ) : (
             <>
-          {/* Progress Steps */}
-          <div className="flex items-center justify-between mb-8">
-            {['Category', 'Details', 'Photos', 'Pricing', 'Availability'].map((label, idx) => (
-              <div key={label} className="flex items-center">
-                <div className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold ${
-                  step > idx + 1 ? 'bg-green-500 text-white' :
-                  step === idx + 1 ? 'bg-primary text-primary-foreground' :
-                  'bg-muted text-muted-foreground'
-                }`}>
-                  {step > idx + 1 ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}
-                </div>
-                <span className={`ml-2 text-sm hidden md:block ${step === idx + 1 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                  {label}
-                </span>
-                {idx < 4 && <div className={`w-8 md:w-16 h-0.5 mx-2 ${step > idx + 1 ? 'bg-green-500' : 'bg-muted'}`} />}
+              {/* Progress Steps */}
+              <div className="flex items-center justify-between mb-8">
+                {['Category', 'Details', 'Photos', 'Pricing', 'Availability'].map((label, idx) => (
+                  <div key={label} className="flex items-center">
+                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-semibold ${
+                      step > idx + 1 ? 'bg-green-500 text-white' :
+                      step === idx + 1 ? 'bg-primary text-primary-foreground' :
+                      'bg-muted text-muted-foreground'
+                    }`}>
+                      {step > idx + 1 ? <CheckCircle2 className="w-5 h-5" /> : idx + 1}
+                    </div>
+                    <span className={`ml-2 text-sm hidden md:block ${step === idx + 1 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                      {label}
+                    </span>
+                    {idx < 4 && <div className={`w-8 md:w-16 h-0.5 mx-2 ${step > idx + 1 ? 'bg-green-500' : 'bg-muted'}`} />}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {/* Step Content */}
-          <Card>
-            <CardContent className="p-6">
-              {/* Step 1: Category */}
-              {step === 1 && (
-                <div className="space-y-6">
-                  <div>
-                    <Label className="text-lg font-semibold">Select Category</Label>
-                    <p className="text-muted-foreground text-sm mt-1">Choose the category that best fits your item</p>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {categories.map((category) => {
-                      const Icon = categoryIcons[category.id] || Building2;
-                      return (
-                        <button
-                          key={category.id}
-                          onClick={() => setFormData({ ...formData, category: category.id, subcategory: '' })}
-                          className={`p-4 rounded-xl border-2 transition-all ${
-                            formData.category === category.id
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border hover:border-primary/50'
-                          }`}
-                        >
-                          <div className={`w-12 h-12 mx-auto mb-2 rounded-xl ${category.colorClass} flex items-center justify-center`}>
-                            <Icon className="w-6 h-6 text-primary-foreground" />
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)}>
+                  <Card>
+                    <CardContent className="p-6">
+                      {/* Step 1: Category */}
+                      {step === 1 && (
+                        <div className="space-y-6">
+                          <div>
+                            <Label className="text-lg font-semibold">Select Category</Label>
+                            <p className="text-muted-foreground text-sm mt-1">Choose the category that best fits your item</p>
                           </div>
-                          <p className="text-sm font-medium text-center">{t.categories[category.nameKey as keyof typeof t.categories]}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {selectedCategory && (
-                    <div>
-                      <Label className="text-lg font-semibold">Select Subcategory</Label>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-                        {selectedCategory.subcategories.map((sub) => (
-                          <button
-                            key={sub.id}
-                            onClick={() => setFormData({ ...formData, subcategory: sub.id })}
-                            className={`p-3 rounded-lg border-2 text-left transition-all ${
-                              formData.subcategory === sub.id
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border hover:border-primary/50'
-                            }`}
-                          >
-                            <p className="text-sm font-medium">{t.subcategories[sub.nameKey as keyof typeof t.subcategories]}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Step 2: Details */}
-              {step === 2 && (
-                <div className="space-y-6">
-                  <div>
-                    <Label htmlFor="title">Listing Title *</Label>
-                    <Input
-                      id="title"
-                      placeholder="e.g., Luxury 3BR Apartment in DHA Phase 5"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      className="mt-2"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="description">Description *</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Describe your item in detail..."
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="mt-2 min-h-32"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="city">City *</Label>
-                      <Select value={formData.city} onValueChange={(value) => setFormData({ ...formData, city: value })}>
-                        <SelectTrigger className="mt-2">
-                          <SelectValue placeholder="Select city" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="karachi">Karachi</SelectItem>
-                          <SelectItem value="lahore">Lahore</SelectItem>
-                          <SelectItem value="islamabad">Islamabad</SelectItem>
-                          <SelectItem value="rawalpindi">Rawalpindi</SelectItem>
-                          <SelectItem value="faisalabad">Faisalabad</SelectItem>
-                          <SelectItem value="multan">Multan</SelectItem>
-                          <SelectItem value="peshawar">Peshawar</SelectItem>
-                          <SelectItem value="quetta">Quetta</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="location">Location/Area *</Label>
-                      <div className="relative mt-2">
-                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          id="location"
-                          placeholder="e.g., DHA Phase 5, Block A"
-                          value={formData.location}
-                          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Dynamic Fields */}
-                  {dynamicFields.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold text-lg mb-4">{selectedCategory?.nameKey} Details</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {dynamicFields.map((field) => (
-                          <div key={field.name}>
-                            {field.type === 'checkbox' ? (
-                              <div className="flex items-center gap-2">
-                                <Checkbox
-                                  id={field.name}
-                                  checked={formData.dynamicFields[field.name] as boolean || false}
-                                  onCheckedChange={(checked) =>
-                                    setFormData({
-                                      ...formData,
-                                      dynamicFields: { ...formData.dynamicFields, [field.name]: checked as boolean }
-                                    })
-                                  }
-                                />
-                                <Label htmlFor={field.name} className="capitalize">{field.name.replace(/([A-Z])/g, ' $1')}</Label>
-                              </div>
-                            ) : field.type === 'select' ? (
-                              <div>
-                                <Label className="capitalize">{field.name.replace(/([A-Z])/g, ' $1')} {field.required && '*'}</Label>
-                                <Select
-                                  value={formData.dynamicFields[field.name] as string || ''}
-                                  onValueChange={(value) =>
-                                    setFormData({
-                                      ...formData,
-                                      dynamicFields: { ...formData.dynamicFields, [field.name]: value }
-                                    })
-                                  }
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {categories.map((cat) => {
+                              const Icon = categoryIcons[cat.id] || Building2;
+                              return (
+                                <button
+                                  key={cat.id}
+                                  type="button"
+                                  onClick={() => {
+                                    form.setValue('category', cat.id, { shouldValidate: form.formState.isSubmitted });
+                                    form.setValue('subcategory', '', { shouldValidate: form.formState.isSubmitted });
+                                  }}
+                                  className={`p-4 rounded-xl border-2 transition-all ${
+                                    category === cat.id
+                                      ? 'border-primary bg-primary/5'
+                                      : 'border-border hover:border-primary/50'
+                                  }`}
                                 >
-                                  <SelectTrigger className="mt-1">
-                                    <SelectValue placeholder={`Select ${field.name}`} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {field.options?.map((opt) => (
-                                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  <div className={`w-12 h-12 mx-auto mb-2 rounded-xl ${cat.colorClass} flex items-center justify-center`}>
+                                    <Icon className="w-6 h-6 text-primary-foreground" />
+                                  </div>
+                                  <p className="text-sm font-medium text-center">{t.categories[cat.nameKey as keyof typeof t.categories]}</p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {form.formState.errors.category && (
+                            <p className="text-sm font-medium text-destructive">{form.formState.errors.category.message}</p>
+                          )}
+
+                          {selectedCategory && (
+                            <div>
+                              <Label className="text-lg font-semibold">Select Subcategory</Label>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+                                {selectedCategory.subcategories.map((sub) => (
+                                  <button
+                                    key={sub.id}
+                                    type="button"
+                                    onClick={() => form.setValue('subcategory', sub.id, { shouldValidate: form.formState.isSubmitted })}
+                                    className={`p-3 rounded-lg border-2 text-left transition-all ${
+                                      subcategory === sub.id
+                                        ? 'border-primary bg-primary/5'
+                                        : 'border-border hover:border-primary/50'
+                                    }`}
+                                  >
+                                    <p className="text-sm font-medium">{t.subcategories[sub.nameKey as keyof typeof t.subcategories]}</p>
+                                  </button>
+                                ))}
                               </div>
-                            ) : (
-                              <div>
-                                <Label htmlFor={field.name} className="capitalize">
-                                  {field.name.replace(/([A-Z])/g, ' $1')} {field.required && '*'}
-                                </Label>
-                                <Input
-                                  id={field.name}
-                                  type={field.type}
-                                  value={formData.dynamicFields[field.name] as string || ''}
-                                  onChange={(e) =>
-                                    setFormData({
-                                      ...formData,
-                                      dynamicFields: { ...formData.dynamicFields, [field.name]: e.target.value }
-                                    })
+                              {form.formState.errors.subcategory && (
+                                <p className="text-sm font-medium text-destructive mt-2">{form.formState.errors.subcategory.message}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Step 2: Details */}
+                      {step === 2 && (
+                        <div className="space-y-6">
+                          <FormField
+                            control={form.control}
+                            name="title"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Listing Title *</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="e.g., Luxury 3BR Apartment in DHA Phase 5" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="description"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Description *</FormLabel>
+                                <FormControl>
+                                  <Textarea placeholder="Describe your item in detail..." className="min-h-32" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="city"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>City *</FormLabel>
+                                  <Select value={field.value} onValueChange={field.onChange}>
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select city" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="karachi">Karachi</SelectItem>
+                                      <SelectItem value="lahore">Lahore</SelectItem>
+                                      <SelectItem value="islamabad">Islamabad</SelectItem>
+                                      <SelectItem value="rawalpindi">Rawalpindi</SelectItem>
+                                      <SelectItem value="faisalabad">Faisalabad</SelectItem>
+                                      <SelectItem value="multan">Multan</SelectItem>
+                                      <SelectItem value="peshawar">Peshawar</SelectItem>
+                                      <SelectItem value="quetta">Quetta</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="location"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Location/Area *</FormLabel>
+                                  <div className="relative">
+                                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <FormControl>
+                                      <Input placeholder="e.g., DHA Phase 5, Block A" className="pl-10" {...field} />
+                                    </FormControl>
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          {/* Dynamic Fields */}
+                          {dynamicFieldDefs.length > 0 && (
+                            <div>
+                              <h3 className="font-semibold text-lg mb-4">{selectedCategory?.nameKey} Details</h3>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {dynamicFieldDefs.map((fieldDef) => {
+                                  const fieldPath = `dynamicFields.${fieldDef.name}` as const;
+                                  const currentValue = dynamicFieldValues[fieldDef.name];
+                                  const errorMessage = (form.formState.errors.dynamicFields as any)?.[fieldDef.name]?.message;
+
+                                  if (fieldDef.type === 'checkbox') {
+                                    return (
+                                      <div key={fieldDef.name} className="flex items-center gap-2">
+                                        <Checkbox
+                                          id={fieldDef.name}
+                                          checked={(currentValue as boolean) || false}
+                                          onCheckedChange={(checked) =>
+                                            form.setValue(fieldPath, checked as boolean, { shouldValidate: form.formState.isSubmitted })
+                                          }
+                                        />
+                                        <Label htmlFor={fieldDef.name} className="capitalize">
+                                          {fieldDef.name.replace(/([A-Z])/g, ' $1')}
+                                        </Label>
+                                      </div>
+                                    );
                                   }
-                                  className="mt-1"
-                                />
+
+                                  if (fieldDef.type === 'select') {
+                                    return (
+                                      <div key={fieldDef.name}>
+                                        <Label className="capitalize">
+                                          {fieldDef.name.replace(/([A-Z])/g, ' $1')} {fieldDef.required && '*'}
+                                        </Label>
+                                        <Select
+                                          value={(currentValue as string) || ''}
+                                          onValueChange={(value) =>
+                                            form.setValue(fieldPath, value, { shouldValidate: form.formState.isSubmitted })
+                                          }
+                                        >
+                                          <SelectTrigger className="mt-1">
+                                            <SelectValue placeholder={`Select ${fieldDef.name}`} />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {fieldDef.options?.map((opt) => (
+                                              <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        {errorMessage && <p className="text-sm font-medium text-destructive mt-1">{errorMessage}</p>}
+                                      </div>
+                                    );
+                                  }
+
+                                  return (
+                                    <div key={fieldDef.name}>
+                                      <Label htmlFor={fieldDef.name} className="capitalize">
+                                        {fieldDef.name.replace(/([A-Z])/g, ' $1')} {fieldDef.required && '*'}
+                                      </Label>
+                                      <Input
+                                        id={fieldDef.name}
+                                        type={fieldDef.type}
+                                        value={(currentValue as string) || ''}
+                                        onChange={(e) =>
+                                          form.setValue(fieldPath, e.target.value, { shouldValidate: form.formState.isSubmitted })
+                                        }
+                                        className="mt-1"
+                                      />
+                                      {errorMessage && <p className="text-sm font-medium text-destructive mt-1">{errorMessage}</p>}
+                                    </div>
+                                  );
+                                })}
                               </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Step 3: Photos */}
+                      {step === 3 && (
+                        <div className="space-y-6">
+                          <div>
+                            <Label className="text-lg font-semibold">Upload Photos</Label>
+                            <p className="text-muted-foreground text-sm mt-1">Add up to 10 photos. First photo will be the cover.</p>
+                          </div>
+
+                          {/* Hidden file input */}
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                          />
+
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                            {images.map((img, idx) => (
+                              <div key={idx} className="relative aspect-square rounded-lg overflow-hidden group">
+                                <img src={img} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                                {idx === 0 && (
+                                  <Badge className="absolute top-2 left-2">Cover</Badge>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => removeImage(idx)}
+                                  className="absolute top-2 right-2 p-1 rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {images.length < 10 && (
+                              <button
+                                type="button"
+                                onClick={handleImageUpload}
+                                className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-2 hover:border-primary transition-colors"
+                              >
+                                <Upload className="w-8 h-8 text-muted-foreground" />
+                                <span className="text-sm text-muted-foreground">Upload</span>
+                              </button>
                             )}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                          {form.formState.errors.images && (
+                            <p className="text-sm font-medium text-destructive">{form.formState.errors.images.message}</p>
+                          )}
 
-              {/* Step 3: Photos */}
-              {step === 3 && (
-                <div className="space-y-6">
-                  <div>
-                    <Label className="text-lg font-semibold">Upload Photos</Label>
-                    <p className="text-muted-foreground text-sm mt-1">Add up to 10 photos. First photo will be the cover.</p>
-                  </div>
+                          <div className="p-4 rounded-lg bg-muted/50 flex items-start gap-3">
+                            <ImageIcon className="w-5 h-5 text-muted-foreground mt-0.5" />
+                            <div className="text-sm text-muted-foreground">
+                              <p className="font-medium text-foreground">Photo Tips</p>
+                              <ul className="mt-1 space-y-1 list-disc list-inside">
+                                <li>Use natural lighting for best results</li>
+                                <li>Show multiple angles of your item</li>
+                                <li>Include close-ups of important details</li>
+                                <li>Minimum resolution: 800x600 pixels</li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                  {/* Hidden file input */}
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                  />
+                      {/* Step 4: Pricing */}
+                      {step === 4 && (
+                        <div className="space-y-6">
+                          <div>
+                            <Label className="text-lg font-semibold">Set Your Prices</Label>
+                            <p className="text-muted-foreground text-sm mt-1">Choose which pricing options to enable</p>
+                          </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    {images.map((img, idx) => (
-                      <div key={idx} className="relative aspect-square rounded-lg overflow-hidden group">
-                        <img src={img} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
-                        {idx === 0 && (
-                          <Badge className="absolute top-2 left-2">Cover</Badge>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="hourlyRate"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Hourly Rate (PKR)</FormLabel>
+                                  <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <FormControl>
+                                      <Input type="number" placeholder="e.g., 500" className="pl-10" {...field} />
+                                    </FormControl>
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="dailyRate"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Daily Rate (PKR)</FormLabel>
+                                  <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <FormControl>
+                                      <Input type="number" placeholder="e.g., 5000" className="pl-10" {...field} />
+                                    </FormControl>
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="weeklyRate"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Weekly Rate (PKR)</FormLabel>
+                                  <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <FormControl>
+                                      <Input type="number" placeholder="e.g., 30000" className="pl-10" {...field} />
+                                    </FormControl>
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="monthlyRate"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Monthly Rate (PKR)</FormLabel>
+                                  <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                    <FormControl>
+                                      <Input type="number" placeholder="e.g., 100000" className="pl-10" {...field} />
+                                    </FormControl>
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          <FormField
+                            control={form.control}
+                            name="deposit"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Security Deposit (PKR)</FormLabel>
+                                <div className="relative">
+                                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                  <FormControl>
+                                    <Input type="number" placeholder="e.g., 10000" className="pl-10" {...field} />
+                                  </FormControl>
+                                </div>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="cancellationPolicy"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Cancellation Policy</FormLabel>
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="flexible">Flexible - Free cancellation up to 24 hours before</SelectItem>
+                                    <SelectItem value="moderate">Moderate - Free cancellation up to 48 hours before</SelectItem>
+                                    <SelectItem value="strict">Strict - 50% refund up to 7 days before</SelectItem>
+                                    <SelectItem value="non-refundable">Non-refundable</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="instantBook"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center justify-between p-4 rounded-lg border space-y-0">
+                                <div className="flex items-center gap-3">
+                                  <Zap className="w-5 h-5 text-primary" />
+                                  <div>
+                                    <p className="font-medium">Enable Instant Booking</p>
+                                    <p className="text-sm text-muted-foreground">Allow renters to book without approval</p>
+                                  </div>
+                                </div>
+                                <FormControl>
+                                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      )}
+
+                      {/* Step 5: Availability */}
+                      {step === 5 && (
+                        <div className="space-y-6">
+                          <div>
+                            <Label className="text-lg font-semibold">Set Availability</Label>
+                            <p className="text-muted-foreground text-sm mt-1">Select dates when your item is NOT available</p>
+                          </div>
+
+                          <div className="flex justify-center">
+                            <Calendar
+                              mode="multiple"
+                              selected={unavailableDates}
+                              onSelect={(dates) => setUnavailableDates(dates || [])}
+                              className="rounded-md border"
+                              disabled={(date) => date < new Date()}
+                            />
+                          </div>
+
+                          {unavailableDates.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              <span className="text-sm text-muted-foreground">Blocked dates:</span>
+                              {unavailableDates.map((date, idx) => (
+                                <Badge key={idx} variant="outline" className="gap-1">
+                                  {date.toLocaleDateString()}
+                                  <button type="button" onClick={() => setUnavailableDates(unavailableDates.filter((_, i) => i !== idx))}>
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+
+                          <Card className="border-primary/20 bg-primary/5">
+                            <CardContent className="p-4">
+                              <h3 className="font-semibold text-foreground mb-2">Ready to publish?</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Your listing will be reviewed and published within 24 hours. You can edit it anytime from your dashboard.
+                              </p>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      )}
+
+                      {/* Navigation */}
+                      <div className="flex justify-between mt-8 pt-6 border-t">
+                        {step > 1 ? (
+                          <Button type="button" variant="outline" onClick={() => setStep(step - 1)}>
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            Previous
+                          </Button>
+                        ) : (
+                          <div />
                         )}
-                        <button
-                          onClick={() => removeImage(idx)}
-                          className="absolute top-2 right-2 p-1 rounded-full bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                        {step < 5 ? (
+                          <Button type="button" onClick={goNext}>
+                            Next
+                            <ArrowRight className="w-4 h-4 ml-2" />
+                          </Button>
+                        ) : (
+                          <Button type="submit" disabled={isLoading}>
+                            {isLoading ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Publish Listing')}
+                          </Button>
+                        )}
                       </div>
-                    ))}
-                    {images.length < 10 && (
-                      <button
-                        onClick={handleImageUpload}
-                        className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-2 hover:border-primary transition-colors"
-                      >
-                        <Upload className="w-8 h-8 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Upload</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="p-4 rounded-lg bg-muted/50 flex items-start gap-3">
-                    <ImageIcon className="w-5 h-5 text-muted-foreground mt-0.5" />
-                    <div className="text-sm text-muted-foreground">
-                      <p className="font-medium text-foreground">Photo Tips</p>
-                      <ul className="mt-1 space-y-1 list-disc list-inside">
-                        <li>Use natural lighting for best results</li>
-                        <li>Show multiple angles of your item</li>
-                        <li>Include close-ups of important details</li>
-                        <li>Minimum resolution: 800x600 pixels</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 4: Pricing */}
-              {step === 4 && (
-                <div className="space-y-6">
-                  <div>
-                    <Label className="text-lg font-semibold">Set Your Prices</Label>
-                    <p className="text-muted-foreground text-sm mt-1">Choose which pricing options to enable</p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="hourlyRate">Hourly Rate (PKR)</Label>
-                      <div className="relative mt-2">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          id="hourlyRate"
-                          type="number"
-                          placeholder="e.g., 500"
-                          value={formData.hourlyRate}
-                          onChange={(e) => setFormData({ ...formData, hourlyRate: e.target.value })}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="dailyRate">Daily Rate (PKR)</Label>
-                      <div className="relative mt-2">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          id="dailyRate"
-                          type="number"
-                          placeholder="e.g., 5000"
-                          value={formData.dailyRate}
-                          onChange={(e) => setFormData({ ...formData, dailyRate: e.target.value })}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="weeklyRate">Weekly Rate (PKR)</Label>
-                      <div className="relative mt-2">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          id="weeklyRate"
-                          type="number"
-                          placeholder="e.g., 30000"
-                          value={formData.weeklyRate}
-                          onChange={(e) => setFormData({ ...formData, weeklyRate: e.target.value })}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label htmlFor="monthlyRate">Monthly Rate (PKR)</Label>
-                      <div className="relative mt-2">
-                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          id="monthlyRate"
-                          type="number"
-                          placeholder="e.g., 100000"
-                          value={formData.monthlyRate}
-                          onChange={(e) => setFormData({ ...formData, monthlyRate: e.target.value })}
-                          className="pl-10"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="deposit">Security Deposit (PKR)</Label>
-                    <div className="relative mt-2">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="deposit"
-                        type="number"
-                        placeholder="e.g., 10000"
-                        value={formData.deposit}
-                        onChange={(e) => setFormData({ ...formData, deposit: e.target.value })}
-                        className="pl-10"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label>Cancellation Policy</Label>
-                    <Select
-                      value={formData.cancellationPolicy}
-                      onValueChange={(value) => setFormData({ ...formData, cancellationPolicy: value })}
-                    >
-                      <SelectTrigger className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="flexible">Flexible - Free cancellation up to 24 hours before</SelectItem>
-                        <SelectItem value="moderate">Moderate - Free cancellation up to 48 hours before</SelectItem>
-                        <SelectItem value="strict">Strict - 50% refund up to 7 days before</SelectItem>
-                        <SelectItem value="non-refundable">Non-refundable</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <Zap className="w-5 h-5 text-primary" />
-                      <div>
-                        <p className="font-medium">Enable Instant Booking</p>
-                        <p className="text-sm text-muted-foreground">Allow renters to book without approval</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={formData.instantBook}
-                      onCheckedChange={(checked) => setFormData({ ...formData, instantBook: checked })}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Step 5: Availability */}
-              {step === 5 && (
-                <div className="space-y-6">
-                  <div>
-                    <Label className="text-lg font-semibold">Set Availability</Label>
-                    <p className="text-muted-foreground text-sm mt-1">Select dates when your item is NOT available</p>
-                  </div>
-
-                  <div className="flex justify-center">
-                    <Calendar
-                      mode="multiple"
-                      selected={unavailableDates}
-                      onSelect={setUnavailableDates}
-                      className="rounded-md border"
-                      disabled={(date) => date < new Date()}
-                    />
-                  </div>
-
-                  {unavailableDates.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      <span className="text-sm text-muted-foreground">Blocked dates:</span>
-                      {unavailableDates.map((date, idx) => (
-                        <Badge key={idx} variant="outline" className="gap-1">
-                          {date.toLocaleDateString()}
-                          <button onClick={() => setUnavailableDates(unavailableDates.filter((_, i) => i !== idx))}>
-                            <X className="w-3 h-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-
-                  <Card className="border-primary/20 bg-primary/5">
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold text-foreground mb-2">Ready to publish?</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Your listing will be reviewed and published within 24 hours. You can edit it anytime from your dashboard.
-                      </p>
                     </CardContent>
                   </Card>
-                </div>
-              )}
-
-              {/* Navigation */}
-              <div className="flex justify-between mt-8 pt-6 border-t">
-                {step > 1 ? (
-                  <Button variant="outline" onClick={() => setStep(step - 1)}>
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Previous
-                  </Button>
-                ) : (
-                  <div />
-                )}
-                {step < 5 ? (
-                  <Button onClick={() => setStep(step + 1)} disabled={!canProceed()}>
-                    Next
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                ) : (
-                  <Button onClick={handleSubmit} disabled={isLoading}>
-                    {isLoading ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Publish Listing')}
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                </form>
+              </Form>
             </>
           )}
         </div>

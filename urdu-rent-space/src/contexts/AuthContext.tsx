@@ -36,6 +36,21 @@ interface RegisterData {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// The API error middleware responds with { success: false, error: { message, details? } },
+// not a top-level `message` — `details` is field-keyed (e.g. { email: ['...'] }) so forms
+// can map server-side validation errors back to the specific field.
+export class ApiError extends Error {
+  details?: Record<string, string[]>;
+  constructor(message: string, details?: Record<string, string[]>) {
+    super(message);
+    this.name = 'ApiError';
+    this.details = details;
+  }
+}
+
+const extractErrorMessage = (data: any, fallback: string) => data?.error?.message || data?.message || fallback;
+const extractErrorDetails = (data: any): Record<string, string[]> | undefined => data?.error?.details;
+
 const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1';
 
 // Render's free tier sleeps after inactivity and can take up to ~60s to wake on
@@ -93,7 +108,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'Login failed');
+      throw new ApiError(extractErrorMessage(data, 'Login failed'), extractErrorDetails(data));
     }
 
     // User data is returned, cookies are set automatically by browser
@@ -111,7 +126,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'Registration failed');
+      throw new ApiError(extractErrorMessage(data, 'Registration failed'), extractErrorDetails(data));
     }
 
     return {
@@ -131,7 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'Verification failed');
+      throw new ApiError(extractErrorMessage(data, 'Verification failed'), extractErrorDetails(data));
     }
 
     // Cookies are set automatically, update user state
@@ -151,7 +166,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.message || 'Failed to resend OTP');
+      throw new ApiError(extractErrorMessage(data, 'Failed to resend OTP'), extractErrorDetails(data));
     }
   };
 

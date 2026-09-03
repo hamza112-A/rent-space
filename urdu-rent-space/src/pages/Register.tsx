@@ -1,53 +1,48 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Mail, Lock, User, Phone, ArrowLeft, Package, ShoppingBag, RefreshCw } from 'lucide-react';
 import { authApi } from '@/lib/api';
+import { registerSchema, REGISTER_STEP_1_FIELDS, type RegisterFormValues } from '@/lib/validation/auth';
+import { getApiErrorMessage, getApiErrorDetails } from '@/lib/errors';
 
 const Register: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-    role: 'both',
-    agreeToTerms: false,
+
+  const form = useForm<RegisterFormValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: {
+      fullName: '',
+      email: '',
+      phone: '',
+      password: '',
+      confirmPassword: '',
+      role: 'both',
+      agreeToTerms: false,
+    },
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (step === 1) {
-      if (formData.password !== formData.confirmPassword) {
-        toast.error('Passwords do not match');
-        return;
-      }
-      setStep(2);
-      return;
-    }
+  const handleNext = async () => {
+    const valid = await form.trigger(REGISTER_STEP_1_FIELDS);
+    if (valid) setStep(2);
+  };
 
-    if (!formData.agreeToTerms) {
-      toast.error('Please agree to the terms and conditions');
-      return;
-    }
-
-    setIsLoading(true);
+  const onSubmit = async (values: RegisterFormValues) => {
     try {
       // Format phone number to +92 format
-      let phone = formData.phone.replace(/\s+/g, '').replace(/-/g, '');
+      let phone = values.phone.replace(/\s+/g, '').replace(/-/g, '');
       if (phone.startsWith('0')) {
         phone = '+92' + phone.substring(1);
       } else if (!phone.startsWith('+92')) {
@@ -55,32 +50,46 @@ const Register: React.FC = () => {
       }
 
       const response = await authApi.register({
-        fullName: formData.fullName,
-        email: formData.email,
-        phone: phone,
-        password: formData.password,
-        role: formData.role,
+        fullName: values.fullName,
+        email: values.email,
+        phone,
+        password: values.password,
+        role: values.role,
       });
 
       const { userId, email } = response.data.data;
-      
+
       // Store user info for OTP verification
-      localStorage.setItem('pendingVerification', JSON.stringify({ 
-        userId, 
+      localStorage.setItem('pendingVerification', JSON.stringify({
+        userId,
         email,
-        phone: phone,
-        role: formData.role 
+        phone,
+        role: values.role,
       }));
 
       toast.success('Account created! Please verify your email.');
       navigate('/verify-otp');
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Registration failed. Please try again.';
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      const details = getApiErrorDetails(error);
+      if (details) {
+        let mappedToField = false;
+        (Object.keys(details) as (keyof RegisterFormValues)[]).forEach((field) => {
+          if (field in form.getValues()) {
+            form.setError(field, { message: details[field][0] });
+            mappedToField = true;
+          }
+        });
+        if (mappedToField) {
+          setStep(1);
+          return;
+        }
+      }
+      toast.error(getApiErrorMessage(error, 'Registration failed. Please try again.'));
     }
   };
+
+  const isLoading = form.formState.isSubmitting;
+  const role = form.watch('role');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 flex items-center justify-center p-4">
@@ -99,7 +108,7 @@ const Register: React.FC = () => {
             <CardDescription>
               {step === 1 ? 'Create your account to get started' : t.auth.selectRole}
             </CardDescription>
-            
+
             {/* Progress Indicator */}
             <div className="flex justify-center gap-2 mt-4">
               <div className={`w-20 h-1 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
@@ -107,177 +116,207 @@ const Register: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {step === 1 ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="fullName">{t.auth.fullName}</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="fullName"
-                        type="text"
-                        placeholder="Ahmed Khan"
-                        className="pl-10"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email">{t.auth.email}</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="you@example.com"
-                        className="pl-10"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">{t.auth.phone}</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="+92 300 1234567"
-                        className="pl-10"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="password">{t.auth.password}</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="••••••••"
-                        className="pl-10 pr-10"
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        required
-                        minLength={8}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">{t.auth.confirmPassword}</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="confirmPassword"
-                        type="password"
-                        placeholder="••••••••"
-                        className="pl-10"
-                        value={formData.confirmPassword}
-                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <RadioGroup
-                    value={formData.role}
-                    onValueChange={(value) => setFormData({ ...formData, role: value })}
-                    className="space-y-3"
-                  >
-                    <Label
-                      htmlFor="owner"
-                      className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        formData.role === 'owner' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <RadioGroupItem value="owner" id="owner" className="mt-1" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Package className="w-5 h-5 text-primary" />
-                          <span className="font-semibold">Owner</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{t.auth.owner}</p>
-                      </div>
-                    </Label>
-
-                    <Label
-                      htmlFor="borrower"
-                      className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        formData.role === 'borrower' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <RadioGroupItem value="borrower" id="borrower" className="mt-1" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <ShoppingBag className="w-5 h-5 text-secondary" />
-                          <span className="font-semibold">Borrower</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{t.auth.borrower}</p>
-                      </div>
-                    </Label>
-
-                    <Label
-                      htmlFor="both"
-                      className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                        formData.role === 'both' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <RadioGroupItem value="both" id="both" className="mt-1" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <RefreshCw className="w-5 h-5 text-accent" />
-                          <span className="font-semibold">Both</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{t.auth.both}</p>
-                      </div>
-                    </Label>
-                  </RadioGroup>
-
-                  <div className="flex items-start space-x-2 pt-4">
-                    <Checkbox
-                      id="terms"
-                      checked={formData.agreeToTerms}
-                      onCheckedChange={(checked) => setFormData({ ...formData, agreeToTerms: checked as boolean })}
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {step === 1 ? (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="fullName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t.auth.fullName}</FormLabel>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                            <FormControl>
+                              <Input type="text" placeholder="Ahmed Khan" className="pl-10" {...field} />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    <Label htmlFor="terms" className="text-sm font-normal cursor-pointer leading-relaxed">
-                      {t.auth.terms}
-                    </Label>
-                  </div>
-                </>
-              )}
 
-              <div className="flex gap-3 pt-2">
-                {step === 2 && (
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
-                    {t.common.back}
-                  </Button>
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t.auth.email}</FormLabel>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                            <FormControl>
+                              <Input type="email" placeholder="you@example.com" className="pl-10" {...field} />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t.auth.phone}</FormLabel>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                            <FormControl>
+                              <Input type="tel" placeholder="+92 300 1234567" className="pl-10" {...field} />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t.auth.password}</FormLabel>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                            <FormControl>
+                              <Input
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="••••••••"
+                                className="pl-10 pr-10"
+                                {...field}
+                              />
+                            </FormControl>
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t.auth.confirmPassword}</FormLabel>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                            <FormControl>
+                              <Input type="password" placeholder="••••••••" className="pl-10" {...field} />
+                            </FormControl>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="role"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <RadioGroup value={field.value} onValueChange={field.onChange} className="space-y-3">
+                              <FormLabel
+                                htmlFor="owner"
+                                className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all font-normal ${
+                                  role === 'owner' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                                }`}
+                              >
+                                <RadioGroupItem value="owner" id="owner" className="mt-1" />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Package className="w-5 h-5 text-primary" />
+                                    <span className="font-semibold">Owner</span>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">{t.auth.owner}</p>
+                                </div>
+                              </FormLabel>
+
+                              <FormLabel
+                                htmlFor="borrower"
+                                className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all font-normal ${
+                                  role === 'borrower' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                                }`}
+                              >
+                                <RadioGroupItem value="borrower" id="borrower" className="mt-1" />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <ShoppingBag className="w-5 h-5 text-secondary" />
+                                    <span className="font-semibold">Borrower</span>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">{t.auth.borrower}</p>
+                                </div>
+                              </FormLabel>
+
+                              <FormLabel
+                                htmlFor="both"
+                                className={`flex items-start gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all font-normal ${
+                                  role === 'both' ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                                }`}
+                              >
+                                <RadioGroupItem value="both" id="both" className="mt-1" />
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <RefreshCw className="w-5 h-5 text-accent" />
+                                    <span className="font-semibold">Both</span>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">{t.auth.both}</p>
+                                </div>
+                              </FormLabel>
+                            </RadioGroup>
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="agreeToTerms"
+                      render={({ field }) => (
+                        <FormItem className="pt-4">
+                          <div className="flex items-start space-x-2">
+                            <FormControl>
+                              <Checkbox id="terms" checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                            <FormLabel htmlFor="terms" className="text-sm font-normal cursor-pointer leading-relaxed">
+                              {t.auth.terms}
+                            </FormLabel>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
                 )}
-                <Button type="submit" className="flex-1" size="lg" disabled={isLoading}>
-                  {isLoading ? t.common.loading : step === 1 ? t.common.next : t.auth.signUp}
-                </Button>
-              </div>
-            </form>
+
+                <div className="flex gap-3 pt-2">
+                  {step === 2 && (
+                    <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(1)}>
+                      {t.common.back}
+                    </Button>
+                  )}
+                  {step === 1 ? (
+                    <Button type="button" className="flex-1" size="lg" onClick={handleNext}>
+                      {t.common.next}
+                    </Button>
+                  ) : (
+                    <Button type="submit" className="flex-1" size="lg" disabled={isLoading}>
+                      {isLoading ? t.common.loading : t.auth.signUp}
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </Form>
 
             {step === 1 && (
               <>
