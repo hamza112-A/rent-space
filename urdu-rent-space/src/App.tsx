@@ -11,6 +11,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import CategoryPage from "./pages/CategoryPage";
+import Categories from "./pages/Categories";
 import Dashboard from "./pages/Dashboard";
 import ListingDetail from "./pages/ListingDetail";
 import CreateListing from "./pages/CreateListing";
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password/:token" element={<ResetPassword />} />
               <Route path="/verify-otp" element={<VerifyOTP />} />
+              <Route path="/categories" element={<Categories />} />
               <Route path="/category/:categoryId" element={<CategoryPage />} />
               <Route path="/listings" element={<CategoryPage />} />
               <Route path="/listing/:listingId" element={<ListingDetail />} />

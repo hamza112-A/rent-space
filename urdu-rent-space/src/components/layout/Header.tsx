@@ -1,9 +1,9 @@
 import React from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useScrolledHeaderStyles } from '@/hooks/useScrolledHeaderStyles';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,93 +17,42 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { 
-  Menu, 
-  X, 
-  Search, 
-  Globe, 
-  User, 
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import SiteSearch from '@/components/search/SiteSearch';
+import {
+  Menu,
+  Search,
+  Globe,
+  User,
   Plus,
   LayoutDashboard,
   ChevronDown,
-  Building2,
-  Car,
-  Shirt,
-  Wrench,
-  Users,
-  Dog,
-  Ship,
-  Plane,
   LogOut,
   Settings,
-  MapPin,
-  TrendingUp
 } from 'lucide-react';
 import { categories } from '@/lib/categories';
 
-const categoryIcons: Record<string, React.ElementType> = {
-  property: Building2,
-  vehicles: Car,
-  clothes: Shirt,
-  equipment: Wrench,
-  services: Users,
-  animals: Dog,
-  boats: Ship,
-  air: Plane,
-};
-
 const Header: React.FC = () => {
-  const { t, language, setLanguage, isRTL } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const { user, isAuthenticated, logout } = useAuth();
-  const location = useLocation();
   const navigate = useNavigate();
+  const styles = useScrolledHeaderStyles();
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
-  const [isScrolled, setIsScrolled] = React.useState(false);
   const [isSearchOpen, setIsSearchOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [locationQuery, setLocationQuery] = React.useState('');
 
   const handleLogout = async () => {
     await logout();
     navigate('/');
   };
 
-  const handleSearch = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (searchQuery.trim() || locationQuery.trim()) {
-      const params = new URLSearchParams();
-      if (searchQuery.trim()) params.set('q', searchQuery.trim());
-      if (locationQuery.trim()) params.set('location', locationQuery.trim());
-      navigate(`/listings?${params.toString()}`);
-      setIsSearchOpen(false);
-      setSearchQuery('');
-      setLocationQuery('');
-    }
-  };
-
-  const handleQuickSearch = (category: string) => {
-    navigate(`/category/${category}`);
-    setIsSearchOpen(false);
-  };
-
-  React.useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const isHome = location.pathname === '/';
-
   return (
-    <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled || !isHome
-          ? 'bg-card/95 backdrop-blur-md shadow-md'
-          : 'bg-transparent'
-      }`}
-    >
+    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${styles.headerClassName}`}>
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
@@ -111,9 +60,7 @@ const Header: React.FC = () => {
             <div className="w-10 h-10 rounded-xl bg-gradient-hero flex items-center justify-center">
               <span className="text-xl font-bold text-primary-foreground">M</span>
             </div>
-            <span className={`text-xl font-bold ${isScrolled || !isHome ? 'text-foreground' : 'text-card'}`}>
-              MyRental
-            </span>
+            <span className={`text-xl font-bold ${styles.textClassName}`}>MyRental</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -121,18 +68,14 @@ const Header: React.FC = () => {
             {/* Categories Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button
-                  className={`flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary ${
-                    isScrolled || !isHome ? 'text-foreground' : 'text-card'
-                  }`}
-                >
+                <button className={`flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary ${styles.textClassName}`}>
                   {t.nav.categories}
                   <ChevronDown className="w-4 h-4" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64 p-2">
                 {categories.map((category) => {
-                  const Icon = categoryIcons[category.id] || Building2;
+                  const Icon = category.icon;
                   return (
                     <DropdownMenuItem key={category.id} asChild>
                       <Link
@@ -147,15 +90,16 @@ const Header: React.FC = () => {
                     </DropdownMenuItem>
                   );
                 })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/categories" className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer text-sm font-medium text-primary">
+                    {t.categories.viewAll}
+                  </Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Link
-              to="/listings"
-              className={`text-sm font-medium transition-colors hover:text-primary ${
-                isScrolled || !isHome ? 'text-foreground' : 'text-card'
-              }`}
-            >
+            <Link to="/listings" className={`text-sm font-medium transition-colors hover:text-primary ${styles.textClassName}`}>
               {t.nav.listings}
             </Link>
           </nav>
@@ -163,10 +107,10 @@ const Header: React.FC = () => {
           {/* Desktop Actions */}
           <div className="hidden lg:flex items-center gap-3">
             {/* Search */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className={isScrolled || !isHome ? '' : 'text-card hover:bg-card/10'}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={styles.iconButtonClassName}
               onClick={() => setIsSearchOpen(true)}
             >
               <Search className="w-5 h-5" />
@@ -175,7 +119,7 @@ const Header: React.FC = () => {
             {/* Language Switcher */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className={isScrolled || !isHome ? '' : 'text-card hover:bg-card/10'}>
+                <Button variant="ghost" size="icon" className={styles.iconButtonClassName}>
                   <Globe className="w-5 h-5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -192,7 +136,7 @@ const Header: React.FC = () => {
             {/* Dashboard Link */}
             {isAuthenticated && (
               <Link to="/dashboard">
-                <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm" className="gap-2">
+                <Button variant={styles.outlineButtonVariant} size="sm" className="gap-2">
                   <LayoutDashboard className="w-4 h-4" />
                   {t.nav.dashboard}
                 </Button>
@@ -203,7 +147,7 @@ const Header: React.FC = () => {
             {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm" className="gap-2">
+                  <Button variant={styles.outlineButtonVariant} size="sm" className="gap-2">
                     <User className="w-4 h-4" />
                     {user?.fullName?.split(' ')[0] || 'Account'}
                     <ChevronDown className="w-3 h-3" />
@@ -232,12 +176,12 @@ const Header: React.FC = () => {
             ) : (
               <>
                 <Link to="/login">
-                  <Button variant={isScrolled || !isHome ? 'ghost' : 'heroOutline'} size="sm">
+                  <Button variant={styles.outlineButtonVariant} size="sm">
                     {t.nav.login}
                   </Button>
                 </Link>
                 <Link to="/register">
-                  <Button variant={isScrolled || !isHome ? 'default' : 'hero'} size="sm">
+                  <Button variant={styles.primaryButtonVariant} size="sm">
                     {t.nav.register}
                   </Button>
                 </Link>
@@ -256,122 +200,109 @@ const Header: React.FC = () => {
           </div>
 
           {/* Mobile Menu Button */}
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`lg:hidden p-2 rounded-lg transition-colors ${
-              isScrolled || !isHome ? 'text-foreground' : 'text-card'
-            }`}
-          >
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
-      </div>
+          <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+            <SheetTrigger asChild>
+              <button className={`lg:hidden p-2 rounded-lg transition-colors ${styles.textClassName}`}>
+                <Menu className="w-6 h-6" />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="right" className="overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>MyRental</SheetTitle>
+              </SheetHeader>
+              <div className="flex flex-col gap-4 mt-6">
+                {/* Search */}
+                <SiteSearch onNavigate={() => setIsMenuOpen(false)} />
 
-      {/* Mobile Menu */}
-      {isMenuOpen && (
-        <div className="lg:hidden bg-card border-t border-border animate-slide-down">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex flex-col gap-4">
-              {/* Search */}
-              <form onSubmit={(e) => { e.preventDefault(); handleSearch(); setIsMenuOpen(false); }} className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder={t.nav.search}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </form>
-
-              {/* Navigation Links */}
-              <div className="flex flex-col gap-2">
-                <Link
-                  to="/categories"
-                  className="px-4 py-3 rounded-xl hover:bg-muted transition-colors"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {t.nav.categories}
-                </Link>
-                <Link
-                  to="/listings"
-                  className="px-4 py-3 rounded-xl hover:bg-muted transition-colors"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {t.nav.listings}
-                </Link>
-                {isAuthenticated && (
+                {/* Navigation Links */}
+                <div className="flex flex-col gap-2">
                   <Link
-                    to="/dashboard"
-                    className="px-4 py-3 rounded-xl hover:bg-muted transition-colors flex items-center gap-2"
+                    to="/categories"
+                    className="px-4 py-3 rounded-xl hover:bg-muted transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <LayoutDashboard className="w-4 h-4" />
-                    {t.nav.dashboard}
+                    {t.nav.categories}
+                  </Link>
+                  <Link
+                    to="/listings"
+                    className="px-4 py-3 rounded-xl hover:bg-muted transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    {t.nav.listings}
+                  </Link>
+                  {isAuthenticated && (
+                    <Link
+                      to="/dashboard"
+                      className="px-4 py-3 rounded-xl hover:bg-muted transition-colors flex items-center gap-2"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <LayoutDashboard className="w-4 h-4" />
+                      {t.nav.dashboard}
+                    </Link>
+                  )}
+                </div>
+
+                {/* Language Switcher */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setLanguage('en')}
+                    className={`flex-1 px-4 py-3 rounded-xl border transition-colors ${
+                      language === 'en' ? 'border-primary bg-primary-light' : 'border-border'
+                    }`}
+                  >
+                    English
+                  </button>
+                  <button
+                    onClick={() => setLanguage('ur')}
+                    className={`flex-1 px-4 py-3 rounded-xl border transition-colors ${
+                      language === 'ur' ? 'border-primary bg-primary-light' : 'border-border'
+                    }`}
+                  >
+                    اردو
+                  </button>
+                </div>
+
+                {/* Auth Buttons */}
+                {isAuthenticated ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="px-4 py-3 rounded-xl bg-muted">
+                      <p className="text-sm text-muted-foreground">{t.auth.signIn}</p>
+                      <p className="font-medium">{user?.fullName}</p>
+                    </div>
+                    <Button variant="outline" className="w-full gap-2" onClick={() => { handleLogout(); setIsMenuOpen(false); }}>
+                      <LogOut className="w-4 h-4" />
+                      {t.nav.logout}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Link to="/login" className="flex-1" onClick={() => setIsMenuOpen(false)}>
+                      <Button variant="outline" className="w-full">
+                        {t.nav.login}
+                      </Button>
+                    </Link>
+                    <Link to="/register" className="flex-1" onClick={() => setIsMenuOpen(false)}>
+                      <Button variant="default" className="w-full">
+                        {t.nav.register}
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+
+                {/* Create Listing - Only for owners */}
+                {(!isAuthenticated || user?.role === 'owner' || user?.role === 'both') && (
+                  <Link to="/create-listing" onClick={() => setIsMenuOpen(false)}>
+                    <Button variant="secondary" className="w-full gap-2">
+                      <Plus className="w-4 h-4" />
+                      {t.nav.createListing}
+                    </Button>
                   </Link>
                 )}
               </div>
-
-              {/* Language Switcher */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setLanguage('en')}
-                  className={`flex-1 px-4 py-3 rounded-xl border transition-colors ${
-                    language === 'en' ? 'border-primary bg-primary-light' : 'border-border'
-                  }`}
-                >
-                  English
-                </button>
-                <button
-                  onClick={() => setLanguage('ur')}
-                  className={`flex-1 px-4 py-3 rounded-xl border transition-colors ${
-                    language === 'ur' ? 'border-primary bg-primary-light' : 'border-border'
-                  }`}
-                >
-                  اردو
-                </button>
-              </div>
-
-              {/* Auth Buttons */}
-              {isAuthenticated ? (
-                <div className="flex flex-col gap-2">
-                  <div className="px-4 py-3 rounded-xl bg-muted">
-                    <p className="text-sm text-muted-foreground">{t.auth.signIn}</p>
-                    <p className="font-medium">{user?.fullName}</p>
-                  </div>
-                  <Button variant="outline" className="w-full gap-2" onClick={() => { handleLogout(); setIsMenuOpen(false); }}>
-                    <LogOut className="w-4 h-4" />
-                    {t.nav.logout}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Link to="/login" className="flex-1" onClick={() => setIsMenuOpen(false)}>
-                    <Button variant="outline" className="w-full">
-                      {t.nav.login}
-                    </Button>
-                  </Link>
-                  <Link to="/register" className="flex-1" onClick={() => setIsMenuOpen(false)}>
-                    <Button variant="default" className="w-full">
-                      {t.nav.register}
-                    </Button>
-                  </Link>
-                </div>
-              )}
-
-              {/* Create Listing - Only for owners */}
-              {(!isAuthenticated || user?.role === 'owner' || user?.role === 'both') && (
-                <Link to="/create-listing" onClick={() => setIsMenuOpen(false)}>
-                  <Button variant="secondary" className="w-full gap-2">
-                    <Plus className="w-4 h-4" />
-                    {t.nav.createListing}
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </div>
+            </SheetContent>
+          </Sheet>
         </div>
-      )}
+      </div>
 
       {/* Search Dialog */}
       <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
@@ -382,63 +313,7 @@ const Header: React.FC = () => {
               {t.nav.search}
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSearch} className="space-y-4">
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder={t.hero.searchPlaceholder}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-                autoFocus
-              />
-            </div>
-            
-            {/* Location Input */}
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder={t.hero.locationPlaceholder}
-                value={locationQuery}
-                onChange={(e) => setLocationQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-
-            {/* Search Button */}
-            <Button type="submit" className="w-full gap-2">
-              <Search className="w-4 h-4" />
-              {t.hero.searchButton}
-            </Button>
-          </form>
-
-          {/* Quick Categories */}
-          <div className="pt-4 border-t">
-            <p className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Popular Categories
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {categories.slice(0, 6).map((category) => {
-                const Icon = categoryIcons[category.id] || Building2;
-                return (
-                  <Button
-                    key={category.id}
-                    variant="outline"
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => handleQuickSearch(category.id)}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {t.categories[category.nameKey as keyof typeof t.categories]}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
+          <SiteSearch onNavigate={() => setIsSearchOpen(false)} showPopularCategories autoFocus />
         </DialogContent>
       </Dialog>
     </header>
