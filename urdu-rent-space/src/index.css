@@ -90,58 +90,6 @@
     --sidebar-ring: 173 80% 32%;
   }
 
-  .dark {
-    --background: 200 25% 8%;
-    --foreground: 45 20% 95%;
-
-    --card: 200 20% 12%;
-    --card-foreground: 45 20% 95%;
-
-    --popover: 200 20% 12%;
-    --popover-foreground: 45 20% 95%;
-
-    --primary: 173 70% 45%;
-    --primary-foreground: 200 25% 8%;
-    --primary-hover: 173 70% 50%;
-    --primary-light: 173 40% 20%;
-
-    --secondary: 24 90% 55%;
-    --secondary-foreground: 200 25% 8%;
-    --secondary-hover: 24 90% 60%;
-    --secondary-light: 24 50% 20%;
-
-    --accent: 45 85% 55%;
-    --accent-foreground: 200 25% 8%;
-    --accent-light: 45 40% 20%;
-
-    --muted: 200 20% 18%;
-    --muted-foreground: 215 16% 65%;
-
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
-
-    --success: 142 60% 45%;
-    --success-foreground: 200 25% 8%;
-    --success-light: 142 40% 18%;
-
-    --warning: 38 80% 55%;
-    --warning-foreground: 200 25% 8%;
-    --warning-light: 38 40% 18%;
-
-    --border: 200 20% 22%;
-    --input: 200 20% 22%;
-    --ring: 173 70% 45%;
-
-    --sidebar-background: 200 20% 10%;
-    --sidebar-foreground: 45 20% 95%;
-    --sidebar-primary: 173 70% 45%;
-    --sidebar-primary-foreground: 200 25% 8%;
-    --sidebar-accent: 173 40% 20%;
-    --sidebar-accent-foreground: 173 70% 45%;
-    --sidebar-border: 200 20% 22%;
-    --sidebar-ring: 173 70% 45%;
-  }
-
   /* RTL Support for Urdu */
   [dir="rtl"] {
     font-family: 'Noto Nastaliq Urdu', serif;
