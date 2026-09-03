@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -14,6 +13,9 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import { useFilterState } from '@/hooks/useFilterState';
+import FilterBar, { ActiveFilter } from '@/components/filters/FilterBar';
+import AdminDataTable, { AdminDataTableColumn } from '@/components/admin/AdminDataTable';
 
 interface User {
   _id: string;
@@ -35,36 +37,45 @@ const ADMIN_ROLE_LABELS: Record<string, string> = {
   superadmin: 'Super Admin (full access)',
 };
 
+const FILTER_DEFAULTS = { search: '', status: '', role: '', page: 1 };
+
 const AdminUsers: React.FC = () => {
   const { t } = useLanguage();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
-  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [actionDialog, setActionDialog] = useState<{ open: boolean; type: string; user: User | null }>({ open: false, type: '', user: null });
   const [actionData, setActionData] = useState({ status: '', reason: '', adminRole: 'none' as 'none' | 'support' | 'finance' | 'superadmin', verifyType: '' });
   const [actionLoading, setActionLoading] = useState(false);
 
+  const filters = useFilterState(FILTER_DEFAULTS);
+  const { search, status: statusFilter, role: roleFilter, page } = filters.values;
+
   useEffect(() => { fetchUsers(); }, [page, statusFilter, roleFilter]);
-  
+
   useEffect(() => {
-    const timeout = setTimeout(() => { page === 1 ? fetchUsers() : setPage(1); }, 500);
+    const timeout = setTimeout(() => { page === 1 ? fetchUsers() : filters.setValue('page', 1); }, 500);
     return () => clearTimeout(timeout);
-  }, [searchTerm]);
+  }, [search]);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await adminApi.getUsers({ page, limit: 20, search: searchTerm || undefined, status: statusFilter || undefined, role: roleFilter || undefined });
+      const response = await adminApi.getUsers({ page, limit: 20, search: search || undefined, status: statusFilter || undefined, role: roleFilter || undefined });
       setUsers(response.data?.data || []);
       setTotalPages(response.data?.pagination?.totalPages || 1);
-    } catch { toast.error('Failed to load users'); } 
+    } catch { toast.error('Failed to load users'); }
     finally { setLoading(false); }
   };
+
+  const activeChips = useMemo<ActiveFilter[]>(() => {
+    const chips: ActiveFilter[] = [];
+    if (search) chips.push({ key: 'search', label: `"${search}"`, onRemove: () => filters.setValue('search', '') });
+    if (statusFilter) chips.push({ key: 'status', label: statusFilter, onRemove: () => filters.setValue('status', '') });
+    if (roleFilter) chips.push({ key: 'role', label: roleFilter, onRemove: () => filters.setValue('role', '') });
+    return chips;
+  }, [search, statusFilter, roleFilter, filters]);
 
   const handleAction = async () => {
     if (!actionDialog.user) return;
@@ -100,6 +111,64 @@ const AdminUsers: React.FC = () => {
     return colors[status] || 'bg-gray-500/10 text-gray-600';
   };
 
+  const columns: AdminDataTableColumn<User>[] = [
+    {
+      key: 'user',
+      header: t.admin.users,
+      render: (user) => (
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-medium text-primary">{user.fullName.charAt(0).toUpperCase()}</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="font-medium">{user.fullName}</p>
+              {user.adminRole && user.adminRole !== 'none' && (
+                <Badge className="bg-purple-500/10 text-purple-600 capitalize"><Shield className="h-3 w-3 mr-1" />{user.adminRole}</Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: t.filters.title,
+      render: (user) => <Badge className={getStatusColor(user.status)}>{user.status}</Badge>,
+    },
+    {
+      key: 'role',
+      header: t.auth.selectRole,
+      render: (user) => (
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">{user.role}</Badge>
+          {user.verification?.email?.verified && <CheckCircle className="h-3 w-3 text-green-500" />}
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (user) => (
+        <div className="flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => openDialog('status', user)}><Ban className="h-4 w-4 mr-2" />{t.common.edit}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openDialog('verify', user)}><CheckCircle className="h-4 w-4 mr-2" />{t.verification.verify}</DropdownMenuItem>
+              {currentUser?.isSuperAdmin && (
+                <DropdownMenuItem onClick={() => openDialog('role', user)}><ShieldCheck className="h-4 w-4 mr-2" />Set Admin Role</DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => openDialog('delete', user)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />{t.common.delete}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -108,13 +177,13 @@ const AdminUsers: React.FC = () => {
       </div>
 
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input placeholder={t.nav.search} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+              <Input placeholder={t.nav.search} value={search} onChange={(e) => filters.setValue('search', e.target.value, { replace: true })} className="pl-10" />
             </div>
-            <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
+            <Select value={statusFilter || 'all'} onValueChange={(v) => filters.setValues({ status: v === 'all' ? '' : v, page: 1 })}>
               <SelectTrigger className="w-40"><SelectValue placeholder={t.filters.title} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t.common.all}</SelectItem>
@@ -123,7 +192,7 @@ const AdminUsers: React.FC = () => {
                 <SelectItem value="banned">{t.booking.cancelled}</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={roleFilter || 'all'} onValueChange={(v) => setRoleFilter(v === 'all' ? '' : v)}>
+            <Select value={roleFilter || 'all'} onValueChange={(v) => filters.setValues({ role: v === 'all' ? '' : v, page: 1 })}>
               <SelectTrigger className="w-40"><SelectValue placeholder={t.auth.selectRole} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t.common.all}</SelectItem>
@@ -133,59 +202,25 @@ const AdminUsers: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+          <FilterBar activeFilters={activeChips} onClearAll={filters.resetAll} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader><CardTitle>{t.admin.users} ({users.length})</CardTitle></CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
-          ) : users.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">{t.common.noResults}</p>
-          ) : (
-            <div className="space-y-4">
-              {users.map((user) => (
-                <div key={user._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-sm font-medium text-primary">{user.fullName.charAt(0).toUpperCase()}</span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{user.fullName}</p>
-                        {user.adminRole && user.adminRole !== 'none' && (
-                          <Badge className="bg-purple-500/10 text-purple-600 capitalize"><Shield className="h-3 w-3 mr-1" />{user.adminRole}</Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
-                        <Badge variant="outline" className="text-xs">{user.role}</Badge>
-                        {user.verification?.email?.verified && <CheckCircle className="h-3 w-3 text-green-500" />}
-                      </div>
-                    </div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openDialog('status', user)}><Ban className="h-4 w-4 mr-2" />{t.common.edit}</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openDialog('verify', user)}><CheckCircle className="h-4 w-4 mr-2" />{t.verification.verify}</DropdownMenuItem>
-                      {currentUser?.isSuperAdmin && (
-                        <DropdownMenuItem onClick={() => openDialog('role', user)}><ShieldCheck className="h-4 w-4 mr-2" />Set Admin Role</DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem onClick={() => openDialog('delete', user)} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />{t.common.delete}</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ))}
-            </div>
-          )}
+          <AdminDataTable
+            columns={columns}
+            rows={users}
+            getRowKey={(user) => user._id}
+            loading={loading}
+            emptyTitle={t.common.noResults}
+          />
           {totalPages > 1 && (
             <div className="flex justify-center gap-2 mt-6">
-              <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t.common.back}</Button>
+              <Button variant="outline" onClick={() => filters.setValue('page', Math.max(1, page - 1))} disabled={page === 1}>{t.common.back}</Button>
               <span className="flex items-center px-4">{page} / {totalPages}</span>
-              <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>{t.common.next}</Button>
+              <Button variant="outline" onClick={() => filters.setValue('page', Math.min(totalPages, page + 1))} disabled={page === totalPages}>{t.common.next}</Button>
             </div>
           )}
         </CardContent>

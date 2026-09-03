@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +10,7 @@ import { Plus, Edit, Trash2, Tag, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import AdminDataTable, { AdminDataTableColumn } from '@/components/admin/AdminDataTable';
 
 interface Category {
   _id: string;
@@ -70,6 +70,44 @@ const AdminCategories: React.FC = () => {
     finally { setActionLoading(false); }
   };
 
+  const columns: AdminDataTableColumn<Category>[] = [
+    {
+      key: 'category',
+      header: t.admin.categories,
+      render: (category) => (
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <Tag className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="font-medium">{category.name}</p>
+              <span className="text-muted-foreground">({category.nameUrdu})</span>
+              <Badge variant={category.isActive ? 'default' : 'secondary'}>{category.isActive ? t.listing.available : t.listing.unavailable}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">{category.description || t.listing.description}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'subcategories',
+      header: 'Subcategories',
+      render: (category) => <span className="text-sm text-muted-foreground">{category.subcategories?.length || 0}</span>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (category) => (
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="icon" onClick={() => openDialog('edit', category)}><Edit className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => openDialog('delete', category)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -83,38 +121,13 @@ const AdminCategories: React.FC = () => {
       <Card>
         <CardHeader><CardTitle>{t.admin.categories} ({categories.length})</CardTitle></CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
-          ) : categories.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">{t.common.noResults}</p>
-          ) : (
-            <div className="space-y-4">
-              {categories.map((category) => (
-                <div key={category._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded bg-primary/10 flex items-center justify-center">
-                      <Tag className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{category.name}</p>
-                        <span className="text-muted-foreground">({category.nameUrdu})</span>
-                        <Badge variant={category.isActive ? 'default' : 'secondary'}>{category.isActive ? t.listing.available : t.listing.unavailable}</Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{category.description || t.listing.description}</p>
-                      {category.subcategories && category.subcategories.length > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">{category.subcategories.length} subcategories</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => openDialog('edit', category)}><Edit className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => openDialog('delete', category)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <AdminDataTable
+            columns={columns}
+            rows={categories}
+            getRowKey={(category) => category._id}
+            loading={loading}
+            emptyTitle={t.common.noResults}
+          />
         </CardContent>
       </Card>
 

@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom';
 import { Users, UserPlus, Trash2, Crown, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { organizationApi } from '@/lib/api';
+import EmptyState from '@/components/common/EmptyState';
 
 interface Member {
   user: { _id: string; fullName: string; email: string; phone?: string };
@@ -181,7 +182,7 @@ const Team: React.FC = () => {
           </div>
 
           {org?.members.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">No team members yet.</p>
+            <EmptyState icon={Users} title="No team members yet." />
           )}
 
           {org?.members.map((member) => (

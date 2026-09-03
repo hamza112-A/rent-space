@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle2, XCircle, Wallet, Clock } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import AdminDataTable, { AdminDataTableColumn } from '@/components/admin/AdminDataTable';
 
 interface Payout {
   _id: string;
@@ -102,6 +102,69 @@ const AdminPayouts: React.FC = () => {
 
   const totalFor = (status: string) => totals.find((t) => t._id === status);
 
+  const columns: AdminDataTableColumn<Payout>[] = [
+    {
+      key: 'owner',
+      header: 'Owner',
+      render: (p) => (
+        <div>
+          <p className="font-medium">{p.user?.fullName || 'Unknown owner'}</p>
+          <p className="text-sm text-muted-foreground">{p.user?.email}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (p) => (
+        <div>
+          <div className="flex items-center gap-2">
+            <Badge className={getStatusColor(p.status)}>{p.status}</Badge>
+            <Badge variant="outline">{METHOD_LABELS[p.method] || p.method}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+            <Clock className="h-3 w-3" /> Requested {new Date(p.requestedAt).toLocaleString()}
+          </p>
+          {p.failureReason && <p className="text-xs text-red-600 mt-1">Reason: {p.failureReason}</p>}
+          {p.processedBy && <p className="text-xs text-muted-foreground mt-1">Processed by {p.processedBy.fullName}</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      render: (p) => <p className="font-bold">{formatCurrency(p.amount, p.currency)}</p>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (p) => (
+        (p.status === 'pending' || p.status === 'processing') && p.method !== 'stripe' ? (
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1 text-destructive"
+              onClick={() => handleMarkFailed(p._id)}
+              disabled={actionLoading === `${p._id}-failed`}
+            >
+              <XCircle className="h-3.5 w-3.5" /> Failed
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1"
+              onClick={() => handleMarkPaid(p._id)}
+              disabled={actionLoading === `${p._id}-paid`}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Mark Paid
+            </Button>
+          </div>
+        ) : null
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -142,58 +205,13 @@ const AdminPayouts: React.FC = () => {
       <Card>
         <CardHeader><CardTitle>Payouts ({payouts.length})</CardTitle></CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="space-y-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
-          ) : payouts.length === 0 ? (
-            <div className="text-center py-8">
-              <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <p className="text-muted-foreground">Nothing here</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {payouts.map((p) => (
-                <div key={p._id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{p.user?.fullName || 'Unknown owner'}</p>
-                      <Badge className={getStatusColor(p.status)}>{p.status}</Badge>
-                      <Badge variant="outline">{METHOD_LABELS[p.method] || p.method}</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{p.user?.email}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                      <Clock className="h-3 w-3" /> Requested {new Date(p.requestedAt).toLocaleString()}
-                    </p>
-                    {p.failureReason && <p className="text-xs text-red-600 mt-1">Reason: {p.failureReason}</p>}
-                    {p.processedBy && <p className="text-xs text-muted-foreground mt-1">Processed by {p.processedBy.fullName}</p>}
-                  </div>
-                  <div className="text-right flex flex-col items-end gap-2">
-                    <p className="text-lg font-bold">{formatCurrency(p.amount, p.currency)}</p>
-                    {(p.status === 'pending' || p.status === 'processing') && p.method !== 'stripe' && (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 text-destructive"
-                          onClick={() => handleMarkFailed(p._id)}
-                          disabled={actionLoading === `${p._id}-failed`}
-                        >
-                          <XCircle className="h-3.5 w-3.5" /> Failed
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="gap-1"
-                          onClick={() => handleMarkPaid(p._id)}
-                          disabled={actionLoading === `${p._id}-paid`}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Mark Paid
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <AdminDataTable
+            columns={columns}
+            rows={payouts}
+            getRowKey={(p) => p._id}
+            loading={loading}
+            emptyTitle="Nothing here"
+          />
         </CardContent>
       </Card>
     </div>

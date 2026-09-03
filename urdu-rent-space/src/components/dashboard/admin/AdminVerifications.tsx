@@ -7,6 +7,7 @@ import { CheckCircle, X, Clock } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import EmptyState from '@/components/common/EmptyState';
 
 interface VerificationUser {
   _id: string;
@@ -73,10 +74,7 @@ const AdminVerifications: React.FC = () => {
           {loading ? (
             <div className="space-y-4">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}</div>
           ) : users.length === 0 ? (
-            <div className="text-center py-8">
-              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <p className="text-muted-foreground">{t.common.noResults}</p>
-            </div>
+            <EmptyState icon={CheckCircle} title={t.common.noResults} />
           ) : (
             <div className="space-y-6">
               {users.map((user) => (

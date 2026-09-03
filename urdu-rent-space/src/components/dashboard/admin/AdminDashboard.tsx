@@ -6,6 +6,7 @@ import { Users, Building, Calendar, DollarSign, Shield, TrendingUp, UserPlus, Ch
 import { useLanguage } from '@/contexts/LanguageContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import EmptyState from '@/components/common/EmptyState';
 
 interface DashboardStats {
   totalUsers: number;
@@ -178,7 +179,7 @@ const AdminDashboard: React.FC = () => {
           <CardContent>
             <div className="space-y-4">
               {recentUsers.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">{t.common.noResults}</p>
+                <EmptyState title={t.common.noResults} className="py-4" />
               ) : (
                 recentUsers.map((user) => (
                   <div key={user._id} className="flex items-center justify-between">
@@ -199,7 +200,7 @@ const AdminDashboard: React.FC = () => {
           <CardContent>
             <div className="space-y-4">
               {recentBookings.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">{t.common.noResults}</p>
+                <EmptyState title={t.common.noResults} className="py-4" />
               ) : (
                 recentBookings.map((booking) => (
                   <div key={booking._id} className="flex items-center justify-between">

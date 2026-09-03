@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { earningsApi } from '@/lib/api';
+import EmptyState from '@/components/common/EmptyState';
 import { useSearchParams } from 'react-router-dom';
 
 interface EarningsSummary {
@@ -446,8 +447,8 @@ const Earnings: React.FC = () => {
               })}
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              No earnings data available yet
+            <div className="h-64 flex items-center justify-center">
+              <EmptyState title="No earnings data available yet" />
             </div>
           )}
         </CardContent>
@@ -503,7 +504,7 @@ const Earnings: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">No transactions yet</div>
+              <EmptyState title="No transactions yet" />
             )}
           </CardContent>
         </Card>

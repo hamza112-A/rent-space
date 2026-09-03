@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -9,9 +8,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ClipboardList } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import AdminDataTable, { AdminDataTableColumn } from '@/components/admin/AdminDataTable';
 
 interface AuditEntry {
   _id: string;
@@ -55,6 +54,41 @@ const AdminAuditLog: React.FC = () => {
     return entries.map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(' · ');
   };
 
+  const columns: AdminDataTableColumn<AuditEntry>[] = [
+    {
+      key: 'admin',
+      header: 'Admin',
+      render: (e) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{e.admin?.fullName || 'Unknown admin'}</span>
+          <Badge variant="outline" className="text-xs capitalize">{e.adminRole}</Badge>
+        </div>
+      ),
+    },
+    {
+      key: 'target',
+      header: 'Target',
+      render: (e) => <Badge variant="outline" className="text-xs capitalize">{e.targetType}</Badge>,
+    },
+    {
+      key: 'action',
+      header: 'Action',
+      render: (e) => (
+        <div>
+          <p className="text-sm">{e.action}</p>
+          {formatDetails(e.details) && (
+            <p className="text-xs text-muted-foreground mt-1">{formatDetails(e.details)}</p>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'when',
+      header: 'When',
+      render: (e) => <span className="text-xs text-muted-foreground whitespace-nowrap">{new Date(e.createdAt).toLocaleString()}</span>,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -78,33 +112,13 @@ const AdminAuditLog: React.FC = () => {
       <Card>
         <CardHeader><CardTitle>Recent Actions ({entries.length})</CardTitle></CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="space-y-3">{[...Array(6)].map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
-          ) : entries.length === 0 ? (
-            <div className="text-center py-8">
-              <ClipboardList className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">No admin actions recorded yet</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {entries.map((e) => (
-                <div key={e._id} className="p-3 border rounded-lg">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{e.admin?.fullName || 'Unknown admin'}</span>
-                      <Badge variant="outline" className="text-xs capitalize">{e.adminRole}</Badge>
-                      <Badge variant="outline" className="text-xs capitalize">{e.targetType}</Badge>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{new Date(e.createdAt).toLocaleString()}</span>
-                  </div>
-                  <p className="text-sm mt-1">{e.action}</p>
-                  {formatDetails(e.details) && (
-                    <p className="text-xs text-muted-foreground mt-1">{formatDetails(e.details)}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <AdminDataTable
+            columns={columns}
+            rows={entries}
+            getRowKey={(e) => e._id}
+            loading={loading}
+            emptyTitle="No admin actions recorded yet"
+          />
         </CardContent>
       </Card>
     </div>

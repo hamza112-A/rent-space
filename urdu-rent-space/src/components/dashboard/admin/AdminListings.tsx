@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -13,6 +12,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useLanguage } from '@/contexts/LanguageContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import { useFilterState } from '@/hooks/useFilterState';
+import FilterBar, { ActiveFilter } from '@/components/filters/FilterBar';
+import AdminDataTable, { AdminDataTableColumn } from '@/components/admin/AdminDataTable';
 
 interface Listing {
   _id: string;
@@ -27,35 +29,44 @@ interface Listing {
   images: Array<{ url: string }>;
 }
 
+const FILTER_DEFAULTS = { search: '', status: '', category: '', page: 1 };
+
 const AdminListings: React.FC = () => {
   const { t } = useLanguage();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [actionDialog, setActionDialog] = useState<{ open: boolean; type: string; listing: Listing | null }>({ open: false, type: '', listing: null });
   const [actionData, setActionData] = useState({ status: '', reason: '' });
   const [actionLoading, setActionLoading] = useState(false);
 
+  const filters = useFilterState(FILTER_DEFAULTS);
+  const { search, status: statusFilter, category: categoryFilter, page } = filters.values;
+
   useEffect(() => { fetchListings(); }, [page, statusFilter, categoryFilter]);
-  
+
   useEffect(() => {
-    const timeout = setTimeout(() => { page === 1 ? fetchListings() : setPage(1); }, 500);
+    const timeout = setTimeout(() => { page === 1 ? fetchListings() : filters.setValue('page', 1); }, 500);
     return () => clearTimeout(timeout);
-  }, [searchTerm]);
+  }, [search]);
 
   const fetchListings = async () => {
     try {
       setLoading(true);
-      const response = await adminApi.getListings({ page, limit: 20, status: statusFilter || undefined, category: categoryFilter || undefined });
+      const response = await adminApi.getListings({ page, limit: 20, search: search || undefined, status: statusFilter || undefined, category: categoryFilter || undefined });
       setListings(response.data?.data || []);
       setTotalPages(response.data?.pagination?.totalPages || 1);
     } catch { toast.error('Failed to load listings'); }
     finally { setLoading(false); }
   };
+
+  const activeChips = useMemo<ActiveFilter[]>(() => {
+    const chips: ActiveFilter[] = [];
+    if (search) chips.push({ key: 'search', label: `"${search}"`, onRemove: () => filters.setValue('search', '') });
+    if (statusFilter) chips.push({ key: 'status', label: statusFilter, onRemove: () => filters.setValue('status', '') });
+    if (categoryFilter) chips.push({ key: 'category', label: categoryFilter, onRemove: () => filters.setValue('category', '') });
+    return chips;
+  }, [search, statusFilter, categoryFilter, filters]);
 
   const handleAction = async () => {
     if (!actionDialog.listing) return;
@@ -88,6 +99,64 @@ const AdminListings: React.FC = () => {
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-PK', { style: 'currency', currency: 'PKR', minimumFractionDigits: 0 }).format(amount);
 
+  const columns: AdminDataTableColumn<Listing>[] = [
+    {
+      key: 'listing',
+      header: t.admin.listings,
+      render: (listing) => (
+        <div className="flex items-center gap-4">
+          <div className="h-16 w-16 rounded bg-muted overflow-hidden flex-shrink-0">
+            {listing.images?.[0]?.url ? (
+              <img src={listing.images[0].url} alt={listing.title} className="h-full w-full object-cover" />
+            ) : <span className="text-xs text-muted-foreground flex items-center justify-center h-full">{t.common.noResults}</span>}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="font-medium">{listing.title}</p>
+              {listing.verified && <CheckCircle className="h-4 w-4 text-green-500" />}
+              {listing.featured && <Star className="h-4 w-4 text-yellow-500 fill-current" />}
+            </div>
+            <p className="text-sm text-muted-foreground">{t.listing.postedBy} {listing.owner?.fullName} • {listing.category}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: t.filters.title,
+      render: (listing) => (
+        <Badge className={getStatusColor(listing.status)}>
+          {listing.status === 'active' && t.listing.available}
+          {listing.status === 'paused' && t.booking.pending}
+          {listing.status === 'rejected' && t.booking.rejected}
+        </Badge>
+      ),
+    },
+    {
+      key: 'price',
+      header: t.listing.perDay,
+      render: (listing) => <span className="text-sm font-medium">{formatCurrency(listing.pricing?.daily || 0)}{t.listing.perDay}</span>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (listing) => (
+        <div className="flex justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'status', listing })}><X className="h-4 w-4 mr-2" />{t.common.edit}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'verify', listing })}><CheckCircle className="h-4 w-4 mr-2" />{listing.verified ? t.verification.notVerified : t.listing.verified}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'feature', listing })}><Star className="h-4 w-4 mr-2" />{listing.featured ? t.listing.featured : t.listing.featured}</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'delete', listing })} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />{t.common.delete}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -96,13 +165,13 @@ const AdminListings: React.FC = () => {
       </div>
 
       <Card>
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input placeholder={t.nav.search} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
+              <Input placeholder={t.nav.search} value={search} onChange={(e) => filters.setValue('search', e.target.value, { replace: true })} className="pl-10" />
             </div>
-            <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
+            <Select value={statusFilter || 'all'} onValueChange={(v) => filters.setValues({ status: v === 'all' ? '' : v, page: 1 })}>
               <SelectTrigger className="w-40"><SelectValue placeholder={t.filters.title} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t.common.all}</SelectItem>
@@ -111,7 +180,7 @@ const AdminListings: React.FC = () => {
                 <SelectItem value="rejected">{t.booking.rejected}</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={categoryFilter || 'all'} onValueChange={(v) => setCategoryFilter(v === 'all' ? '' : v)}>
+            <Select value={categoryFilter || 'all'} onValueChange={(v) => filters.setValues({ category: v === 'all' ? '' : v, page: 1 })}>
               <SelectTrigger className="w-40"><SelectValue placeholder={t.nav.categories} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t.common.all}</SelectItem>
@@ -121,61 +190,25 @@ const AdminListings: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+          <FilterBar activeFilters={activeChips} onClearAll={filters.resetAll} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader><CardTitle>{t.admin.listings} ({listings.length})</CardTitle></CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}</div>
-          ) : listings.length === 0 ? (
-            <p className="text-center py-8 text-muted-foreground">{t.common.noResults}</p>
-          ) : (
-            <div className="space-y-4">
-              {listings.map((listing) => (
-                <div key={listing._id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                  <div className="flex items-center gap-4">
-                    <div className="h-16 w-16 rounded bg-muted overflow-hidden">
-                      {listing.images?.[0]?.url ? (
-                        <img src={listing.images[0].url} alt={listing.title} className="h-full w-full object-cover" />
-                      ) : <span className="text-xs text-muted-foreground flex items-center justify-center h-full">{t.common.noResults}</span>}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{listing.title}</p>
-                        {listing.verified && <CheckCircle className="h-4 w-4 text-green-500" />}
-                        {listing.featured && <Star className="h-4 w-4 text-yellow-500 fill-current" />}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{t.listing.postedBy} {listing.owner?.fullName} • {listing.category}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className={getStatusColor(listing.status)}>
-                          {listing.status === 'active' && t.listing.available}
-                          {listing.status === 'paused' && t.booking.pending}
-                          {listing.status === 'rejected' && t.booking.rejected}
-                        </Badge>
-                        <span className="text-sm font-medium">{formatCurrency(listing.pricing?.daily || 0)}{t.listing.perDay}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'status', listing })}><X className="h-4 w-4 mr-2" />{t.common.edit}</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'verify', listing })}><CheckCircle className="h-4 w-4 mr-2" />{listing.verified ? t.verification.notVerified : t.listing.verified}</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'feature', listing })}><Star className="h-4 w-4 mr-2" />{listing.featured ? t.listing.featured : t.listing.featured}</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setActionDialog({ open: true, type: 'delete', listing })} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" />{t.common.delete}</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ))}
-            </div>
-          )}
+          <AdminDataTable
+            columns={columns}
+            rows={listings}
+            getRowKey={(listing) => listing._id}
+            loading={loading}
+            emptyTitle={t.common.noResults}
+          />
           {totalPages > 1 && (
             <div className="flex justify-center gap-2 mt-6">
-              <Button variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>{t.common.back}</Button>
+              <Button variant="outline" onClick={() => filters.setValue('page', Math.max(1, page - 1))} disabled={page === 1}>{t.common.back}</Button>
               <span className="flex items-center px-4">{page} / {totalPages}</span>
-              <Button variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>{t.common.next}</Button>
+              <Button variant="outline" onClick={() => filters.setValue('page', Math.min(totalPages, page + 1))} disabled={page === totalPages}>{t.common.next}</Button>
             </div>
           )}
         </CardContent>

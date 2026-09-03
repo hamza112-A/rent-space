@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertCircle,
   Plus,
@@ -19,6 +20,7 @@ import {
   Upload,
   X,
   Circle,
+  Loader2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -50,7 +52,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import api from '@/lib/api';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
+import EmptyState from '@/components/common/EmptyState';
 
 interface SearchUser {
   _id: string;
@@ -208,7 +211,7 @@ const Disputes: React.FC = () => {
       const res = await api.get(endpoint);
       setDisputes(res.data.data);
     } catch (err: any) {
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to fetch disputes', variant: 'destructive' });
+      toast.error('Error', { description: err.response?.data?.message || 'Failed to fetch disputes' });
     } finally {
       setLoading(false);
     }
@@ -220,14 +223,14 @@ const Disputes: React.FC = () => {
       setSelectedDispute(res.data.data);
       setShowDetailDialog(true);
     } catch (err: any) {
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to load details', variant: 'destructive' });
+      toast.error('Error', { description: err.response?.data?.message || 'Failed to load details' });
     }
   };
 
   const handleCreateDispute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) {
-      toast({ title: 'Error', description: 'Please select a user', variant: 'destructive' });
+      toast.error('Error', { description: 'Please select a user' });
       return;
     }
     try {
@@ -241,7 +244,7 @@ const Disputes: React.FC = () => {
       evidenceFiles.forEach((f) => payload.append('evidence', f));
 
       await api.post('/disputes', payload, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast({ title: 'Success', description: 'Dispute submitted. Our team will review it shortly.' });
+      toast.success('Success', { description: 'Dispute submitted. Our team will review it shortly.' });
       setShowCreateDialog(false);
       setFormData({ bookingId: '', category: '', subject: '', description: '', requestedAmount: '' });
       setEvidenceFiles([]);
@@ -249,7 +252,7 @@ const Disputes: React.FC = () => {
       setUserSearchQuery('');
       fetchDisputes();
     } catch (err: any) {
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to create dispute', variant: 'destructive' });
+      toast.error('Error', { description: err.response?.data?.message || 'Failed to create dispute' });
     }
   };
 
@@ -259,11 +262,11 @@ const Disputes: React.FC = () => {
       setSendingMessage(true);
       await api.post(`/disputes/${selectedDispute._id}/messages`, { content: newMessage });
       setNewMessage('');
-      toast({ title: 'Message sent' });
+      toast.success('Message sent');
       const res = await api.get(`/disputes/${selectedDispute._id}`);
       setSelectedDispute(res.data.data);
     } catch (err: any) {
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to send message', variant: 'destructive' });
+      toast.error('Error', { description: err.response?.data?.message || 'Failed to send message' });
     } finally {
       setSendingMessage(false);
     }
@@ -299,7 +302,7 @@ const Disputes: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dispute Resolution Center</h2>
+          <h1 className="text-2xl font-bold text-foreground">Dispute Resolution Center</h1>
           <p className="text-muted-foreground">Manage and track your disputes with our support team</p>
         </div>
 
@@ -349,7 +352,7 @@ const Disputes: React.FC = () => {
                         <CommandEmpty>
                           {searchingUsers ? (
                             <div className="flex justify-center py-6">
-                              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                             </div>
                           ) : userSearchQuery.length < 2 ? 'Type at least 2 characters...' : 'No users found.'}
                         </CommandEmpty>
@@ -481,17 +484,31 @@ const Disputes: React.FC = () => {
 
       {/* List */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        <div className="grid gap-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-6 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-4 w-32" />
+                  </div>
+                  <Skeleton className="h-5 w-20" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : filteredDisputes.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No disputes found</h3>
-            <p className="text-muted-foreground text-center">
-              You haven't filed any disputes yet. If you encounter any issues, you can file a dispute above.
-            </p>
+          <CardContent className="pt-6">
+            <EmptyState
+              icon={AlertCircle}
+              title="No disputes found"
+              description="You haven't filed any disputes yet. If you encounter any issues, you can file a dispute above."
+            />
           </CardContent>
         </Card>
       ) : (
@@ -697,7 +714,7 @@ const Disputes: React.FC = () => {
 
                   {/* Respondent Response */}
                   {selectedDispute.respondentResponse?.submitted && (
-                    <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20">
+                    <Card className="border-blue-200 bg-blue-50/50">
                       <CardHeader className="pb-2"><CardTitle className="text-sm">Respondent's Response</CardTitle></CardHeader>
                       <CardContent>
                         <p className="text-sm text-muted-foreground">{selectedDispute.respondentResponse.response}</p>
@@ -712,9 +729,9 @@ const Disputes: React.FC = () => {
 
                   {/* Resolution */}
                   {selectedDispute.resolution?.decision && (
-                    <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
+                    <Card className="border-green-200 bg-green-50/50">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2 text-green-700 dark:text-green-300">
+                        <CardTitle className="text-sm flex items-center gap-2 text-green-700">
                           <CheckCircle2 className="h-4 w-4" />
                           Resolution
                         </CardTitle>
@@ -757,7 +774,7 @@ const Disputes: React.FC = () => {
                       <ScrollArea className="h-56 mb-4">
                         <div className="space-y-4 pr-2">
                           {!selectedDispute.messages?.length ? (
-                            <p className="text-sm text-muted-foreground text-center py-4">No messages yet</p>
+                            <EmptyState title="No messages yet" />
                           ) : (
                             selectedDispute.messages.map((msg, idx) => {
                               const isMe = msg.sender?._id === user?._id;
@@ -792,8 +809,9 @@ const Disputes: React.FC = () => {
                             rows={2}
                             className="resize-none"
                           />
-                          <Button onClick={handleSendMessage} disabled={sendingMessage || !newMessage.trim()} className="self-end">
-                            {sendingMessage ? 'Sending...' : 'Send'}
+                          <Button onClick={handleSendMessage} disabled={sendingMessage || !newMessage.trim()} className="self-end gap-2">
+                            {sendingMessage && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Send
                           </Button>
                         </div>
                       )}

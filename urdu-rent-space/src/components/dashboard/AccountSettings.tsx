@@ -45,11 +45,13 @@ import {
   Building,
   Star,
   Crown,
+  Loader2,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { userApi, authApi, paymentApi, subscriptionApi } from '@/lib/api';
 import { toast } from 'sonner';
+import EmptyState from '@/components/common/EmptyState';
 
 const AccountSettings: React.FC = () => {
   const { t, language, setLanguage } = useLanguage();
@@ -611,7 +613,7 @@ const AccountSettings: React.FC = () => {
                 disabled={uploadingImage}
               >
                 {uploadingImage ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Camera className="h-4 w-4" />
                 )}
@@ -822,10 +824,9 @@ const AccountSettings: React.FC = () => {
             </Button>
           </div>
           {twoFAStatus.enabled && twoFAStatus.backupCodesRemaining < 3 && (
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <p className="text-sm text-amber-600">
-                ⚠️ You have only {twoFAStatus.backupCodesRemaining} backup codes remaining. Consider regenerating them.
-              </p>
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-700 text-sm">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>You have only {twoFAStatus.backupCodesRemaining} backup codes remaining. Consider regenerating them.</span>
             </div>
           )}
         </CardContent>
@@ -867,7 +868,7 @@ const AccountSettings: React.FC = () => {
                   </span>
                 </div>
               )}
-              <Button variant="outline" className="w-full mt-2" onClick={() => navigate('/subscription')}>
+              <Button variant="outline" className="w-full" onClick={() => navigate('/subscription')}>
                 Manage Plan
               </Button>
             </div>
@@ -888,13 +889,13 @@ const AccountSettings: React.FC = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {paymentMethods.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">No payment methods added yet</p>
+            <EmptyState icon={CreditCard} title="No payment methods added yet" />
           ) : (
             <div className="space-y-3">
               {paymentMethods.map((method) => (
                 <div
                   key={method._id}
-                  className="flex items-center justify-between p-4 rounded-lg border bg-muted/30"
+                  className="flex items-center justify-between p-3 rounded-lg border"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-full bg-primary/10 text-primary">
@@ -907,8 +908,8 @@ const AccountSettings: React.FC = () => {
                       )}
                     </div>
                     {method.isDefault && (
-                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
-                        <Star className="h-3 w-3 mr-1" /> Default
+                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20 gap-1">
+                        <Star className="h-3 w-3" /> Default
                       </Badge>
                     )}
                   </div>
@@ -1347,10 +1348,9 @@ const AccountSettings: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-sm text-amber-600">
-                    ⚠️ These codes will only be shown once. Save them now!
-                  </p>
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-700 text-sm">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>These codes will only be shown once. Save them now!</span>
                 </div>
               </div>
             )}

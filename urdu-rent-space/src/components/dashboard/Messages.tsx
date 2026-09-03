@@ -32,6 +32,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { messageApi, safetyApi } from '@/lib/api';
 import { toast } from 'sonner';
+import EmptyState from '@/components/common/EmptyState';
 import {
   MessageSquare,
   Send,
@@ -49,6 +50,7 @@ import {
   CalendarPlus,
   Calendar as CalendarIcon,
   Info,
+  Loader2,
 } from 'lucide-react';
 
 interface Message {
@@ -289,7 +291,7 @@ const Messages: React.FC<MessagesProps> = ({ onNavigateTab }) => {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Skeleton className="h-[600px]" />
@@ -300,9 +302,9 @@ const Messages: React.FC<MessagesProps> = ({ onNavigateTab }) => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">{t.dashboard.messages}</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t.dashboard.messages}</h1>
         <p className="text-muted-foreground">{t.booking.receivedBookings}</p>
       </div>
 
@@ -323,10 +325,7 @@ const Messages: React.FC<MessagesProps> = ({ onNavigateTab }) => {
           <CardContent className="p-0">
             <ScrollArea className="h-[500px]">
               {filteredConversations.length === 0 ? (
-                <div className="p-8 text-center">
-                  <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">{t.common.noResults}</p>
-                </div>
+                <EmptyState icon={MessageSquare} title={t.common.noResults} />
               ) : (
                 filteredConversations.map((conv) => {
                   const other = getOtherParticipant(conv);
@@ -492,7 +491,7 @@ const Messages: React.FC<MessagesProps> = ({ onNavigateTab }) => {
                         <Info className="h-4 w-4 mt-0.5 shrink-0" />
                         <span>For your safety, keep payments and communication inside the app — never share card or bank details here.</span>
                       </div>
-                      <p className="text-muted-foreground">{t.common.noResults}</p>
+                      <EmptyState icon={MessageSquare} title={t.common.noResults} className="py-0" />
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -584,11 +583,7 @@ const Messages: React.FC<MessagesProps> = ({ onNavigateTab }) => {
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <p className="text-lg font-medium">{t.dashboard.messages}</p>
-                <p className="text-muted-foreground">{t.common.noResults}</p>
-              </div>
+              <EmptyState icon={MessageSquare} title={t.dashboard.messages} description={t.common.noResults} />
             </div>
           )}
         </Card>
@@ -626,8 +621,9 @@ const Messages: React.FC<MessagesProps> = ({ onNavigateTab }) => {
             <Button variant="outline" onClick={() => setReportOpen(false)} disabled={reportSubmitting}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleSubmitReport} disabled={reportSubmitting || !reportReason}>
-              {reportSubmitting ? 'Submitting...' : 'Submit report'}
+            <Button variant="destructive" onClick={handleSubmitReport} disabled={reportSubmitting || !reportReason} className="gap-2">
+              {reportSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Submit report
             </Button>
           </DialogFooter>
         </DialogContent>

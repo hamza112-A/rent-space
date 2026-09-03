@@ -10,7 +10,6 @@ import {
   CheckCircle,
   XCircle,
   Eye,
-  User,
   Clock,
   TrendingUp
 } from 'lucide-react';
@@ -19,10 +18,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import api from '@/lib/api';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import AdminDataTable, { AdminDataTableColumn } from '@/components/admin/AdminDataTable';
 
 interface Dispute {
   _id: string;
@@ -132,11 +132,7 @@ const AdminDisputes: React.FC = () => {
       const response = await api.get('/disputes/admin/all', { params });
       setDisputes(response.data.data);
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to fetch disputes',
-        variant: 'destructive'
-      });
+      toast.error('Error', { description: error.response?.data?.message || 'Failed to fetch disputes' });
     } finally {
       setLoading(false);
     }
@@ -157,11 +153,7 @@ const AdminDisputes: React.FC = () => {
       setSelectedDispute(response.data.data);
       setShowDetailsDialog(true);
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to fetch dispute details',
-        variant: 'destructive'
-      });
+      toast.error('Error', { description: error.response?.data?.message || 'Failed to fetch dispute details' });
     }
   };
 
@@ -173,21 +165,14 @@ const AdminDisputes: React.FC = () => {
         adminId: user?._id
       });
       
-      toast({
-        title: 'Success',
-        description: 'Dispute assigned to you'
-      });
+      toast.success('Success', { description: 'Dispute assigned to you' });
       
       fetchDisputes();
       if (selectedDispute) {
         fetchDisputeDetails(selectedDispute._id);
       }
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to assign dispute',
-        variant: 'destructive'
-      });
+      toast.error('Error', { description: error.response?.data?.message || 'Failed to assign dispute' });
     }
   };
 
@@ -197,21 +182,14 @@ const AdminDisputes: React.FC = () => {
     try {
       await api.put(`/disputes/${selectedDispute._id}/status`, { status });
       
-      toast({
-        title: 'Success',
-        description: 'Dispute status updated'
-      });
+      toast.success('Success', { description: 'Dispute status updated' });
       
       fetchDisputes();
       if (selectedDispute) {
         fetchDisputeDetails(selectedDispute._id);
       }
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to update status',
-        variant: 'destructive'
-      });
+      toast.error('Error', { description: error.response?.data?.message || 'Failed to update status' });
     }
   };
 
@@ -224,18 +202,11 @@ const AdminDisputes: React.FC = () => {
       });
       
       setNewMessage('');
-      toast({
-        title: 'Success',
-        description: 'Message sent'
-      });
+      toast.success('Success', { description: 'Message sent' });
       
       fetchDisputeDetails(selectedDispute._id);
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to send message',
-        variant: 'destructive'
-      });
+      toast.error('Error', { description: error.response?.data?.message || 'Failed to send message' });
     }
   };
 
@@ -252,21 +223,11 @@ const AdminDisputes: React.FC = () => {
       const refund = res.data?.refund;
 
       if (refund?.refunded) {
-        toast({
-          title: 'Dispute resolved',
-          description: `PKR ${refund.amount.toLocaleString()} refunded to the complainant via Stripe.`
-        });
+        toast.success('Dispute resolved', { description: `PKR ${refund.amount.toLocaleString()} refunded to the complainant via Stripe.` });
       } else if (refund && !refund.refunded) {
-        toast({
-          title: 'Dispute resolved — refund failed',
-          description: refund.error || 'Could not process the refund automatically. Process it manually.',
-          variant: 'destructive'
-        });
+        toast.error('Dispute resolved — refund failed', { description: refund.error || 'Could not process the refund automatically. Process it manually.' });
       } else {
-        toast({
-          title: 'Success',
-          description: 'Dispute has been resolved'
-        });
+        toast.success('Success', { description: 'Dispute has been resolved' });
       }
 
       setShowResolveDialog(false);
@@ -274,11 +235,7 @@ const AdminDisputes: React.FC = () => {
       fetchDisputes();
       setShowDetailsDialog(false);
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to resolve dispute',
-        variant: 'destructive'
-      });
+      toast.error('Error', { description: error.response?.data?.message || 'Failed to resolve dispute' });
     }
   };
 
@@ -304,6 +261,80 @@ const AdminDisputes: React.FC = () => {
     };
     return colors[priority] || 'bg-gray-500';
   };
+
+  const getAgeBadge = (dispute: Dispute) => {
+    if (['resolved', 'closed'].includes(dispute.status)) return null;
+    const ageHours = (Date.now() - new Date(dispute.createdAt).getTime()) / (1000 * 60 * 60);
+    const slaHours: Record<string, number> = { urgent: 24, high: 48, medium: 96, low: 168 };
+    const overSla = ageHours > (slaHours[dispute.priority] || 96);
+    const ageDays = Math.floor(ageHours / 24);
+    return (
+      <Badge variant="outline" className={overSla ? 'border-red-500/40 text-red-600' : 'text-muted-foreground'}>
+        {ageDays > 0 ? `${ageDays}d old` : `${Math.round(ageHours)}h old`}{overSla ? ' — overdue' : ''}
+      </Badge>
+    );
+  };
+
+  const columns: AdminDataTableColumn<Dispute>[] = [
+    {
+      key: 'dispute',
+      header: 'Dispute',
+      render: (dispute) => (
+        <div>
+          <p className="font-medium">{dispute.subject}</p>
+          <p className="text-xs text-muted-foreground">
+            {dispute.disputeId} • Filed {new Date(dispute.createdAt).toLocaleDateString()}
+          </p>
+          {dispute.assignedTo && (
+            <p className="text-xs text-muted-foreground mt-1">Assigned to {dispute.assignedTo.fullName}</p>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'parties',
+      header: 'Parties',
+      render: (dispute) => (
+        <div className="text-sm">
+          <p><span className="text-muted-foreground">Complainant:</span> {dispute.complainant?.fullName || 'Unknown'}</p>
+          <p><span className="text-muted-foreground">Respondent:</span> {dispute.respondent?.fullName || 'Unknown'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      render: (dispute) => <span className="text-sm capitalize">{dispute.category?.replace(/_/g, ' ') || 'N/A'}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Priority / Status',
+      render: (dispute) => (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge className={getPriorityColor(dispute.priority)}>{dispute.priority}</Badge>
+          <Badge className={getStatusColor(dispute.status)}>{dispute.status.replace(/_/g, ' ')}</Badge>
+          {getAgeBadge(dispute)}
+        </div>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      className: 'text-right',
+      render: (dispute) => (
+        <div className="flex items-center justify-end gap-3">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MessageSquare className="h-3.5 w-3.5" />
+            {dispute.messages?.length || 0}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => fetchDisputeDetails(dispute._id)}>
+            <Eye className="mr-2 h-4 w-4" />
+            View & Manage
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -375,88 +406,17 @@ const AdminDisputes: React.FC = () => {
       </Tabs>
 
       {/* Disputes List */}
-      {loading ? (
-        <div className="flex justify-center items-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {disputes.map((dispute) => (
-            <Card key={dispute._id} className="hover:shadow-md transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl">{dispute.subject}</CardTitle>
-                    <CardDescription>
-                      {dispute.disputeId} • Filed {new Date(dispute.createdAt).toLocaleDateString()}
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    {!['resolved', 'closed'].includes(dispute.status) && (() => {
-                      const ageHours = (Date.now() - new Date(dispute.createdAt).getTime()) / (1000 * 60 * 60);
-                      const slaHours: Record<string, number> = { urgent: 24, high: 48, medium: 96, low: 168 };
-                      const overSla = ageHours > (slaHours[dispute.priority] || 96);
-                      const ageDays = Math.floor(ageHours / 24);
-                      return (
-                        <Badge variant="outline" className={overSla ? 'border-red-500/40 text-red-600' : 'text-muted-foreground'}>
-                          {ageDays > 0 ? `${ageDays}d old` : `${Math.round(ageHours)}h old`}{overSla ? ' — overdue' : ''}
-                        </Badge>
-                      );
-                    })()}
-                    <Badge className={getPriorityColor(dispute.priority)}>
-                      {dispute.priority}
-                    </Badge>
-                    <Badge className={getStatusColor(dispute.status)}>
-                      {dispute.status.replace(/_/g, ' ')}
-                    </Badge>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Complainant:</span>
-                      <p className="font-medium">{dispute.complainant?.fullName || 'Unknown'}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Respondent:</span>
-                      <p className="font-medium">{dispute.respondent?.fullName || 'Unknown'}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Category:</span>
-                      <p className="font-medium">{dispute.category?.replace(/_/g, ' ') || 'N/A'}</p>
-                    </div>
-                  </div>
-
-                  {dispute.assignedTo && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Assigned to:</span>
-                      <span className="font-medium">{dispute.assignedTo?.fullName || 'Unknown'}</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-4 border-t">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MessageSquare className="h-4 w-4" />
-                      <span>{dispute.messages?.length || 0} messages</span>
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => fetchDisputeDetails(dispute._id)}
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      View & Manage
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      <Card>
+        <CardContent className="p-6">
+          <AdminDataTable
+            columns={columns}
+            rows={disputes}
+            getRowKey={(dispute) => dispute._id}
+            loading={loading}
+            emptyTitle="No disputes found"
+          />
+        </CardContent>
+      </Card>
 
       {/* Dispute Details Dialog */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
@@ -607,9 +567,9 @@ const AdminDisputes: React.FC = () => {
 
                   {/* Resolution Summary (if already resolved) */}
                   {selectedDispute.resolution?.decision && (
-                    <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
+                    <Card className="border-green-200 bg-green-50/50">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm flex items-center gap-2 text-green-700 dark:text-green-300">
+                        <CardTitle className="text-sm flex items-center gap-2 text-green-700">
                           <CheckCircle className="h-4 w-4" />
                           Resolution Details
                         </CardTitle>
@@ -634,11 +594,11 @@ const AdminDisputes: React.FC = () => {
                           </div>
                         )}
                         {selectedDispute.awardedAmount !== undefined && selectedDispute.awardedAmount > 0 && (
-                          <div className="flex items-center gap-2 p-3 rounded-lg bg-green-100 dark:bg-green-900/30">
+                          <div className="flex items-center gap-2 p-3 rounded-lg bg-green-100">
                             <TrendingUp className="h-4 w-4 text-green-600" />
                             <div>
                               <p className="text-xs text-muted-foreground">Payout Awarded</p>
-                              <p className="font-semibold text-green-700 dark:text-green-300">
+                              <p className="font-semibold text-green-700">
                                 PKR {selectedDispute.awardedAmount.toLocaleString()}
                               </p>
                             </div>

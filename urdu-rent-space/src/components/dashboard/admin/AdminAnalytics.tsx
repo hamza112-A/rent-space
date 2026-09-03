@@ -7,6 +7,7 @@ import { TrendingUp, Users, Building, DollarSign, TrendingDown, Minus } from 'lu
 import { useLanguage } from '@/contexts/LanguageContext';
 import { adminApi } from '@/lib/api';
 import { toast } from 'sonner';
+import EmptyState from '@/components/common/EmptyState';
 import {
   BarChart,
   Bar,
@@ -307,8 +308,8 @@ const AdminAnalytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             {bookingStatusData.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-muted-foreground">
-                No booking data available
+              <div className="h-64 flex items-center justify-center">
+                <EmptyState title="No booking data available" />
               </div>
             ) : (
               <div className="flex items-center gap-4">
@@ -361,8 +362,8 @@ const AdminAnalytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             {roleDistributionData.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-muted-foreground">
-                No data available
+              <div className="h-48 flex items-center justify-center">
+                <EmptyState title="No data available" />
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
@@ -397,8 +398,8 @@ const AdminAnalytics: React.FC = () => {
           </CardHeader>
           <CardContent>
             {categoryDistributionData.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-muted-foreground">
-                No data available
+              <div className="h-48 flex items-center justify-center">
+                <EmptyState title="No data available" />
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
