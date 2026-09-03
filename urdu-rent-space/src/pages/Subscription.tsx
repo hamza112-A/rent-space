@@ -32,6 +32,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import EmptyState from '@/components/common/EmptyState';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder');
 
@@ -81,17 +82,22 @@ const PaymentForm: React.FC<{
   const elements = useElements();
   const [loading, setLoading] = useState(false);
   const [clientSecret, setClientSecret] = useState('');
+  const [initError, setInitError] = useState('');
 
   useEffect(() => {
     createPaymentIntent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const createPaymentIntent = async () => {
     try {
+      setInitError('');
       const response = await subscriptionApi.createPayment(plan.id);
       setClientSecret(response.data.data.clientSecret);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to initialize payment');
+      const message = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to initialize payment';
+      toast.error(message);
+      setInitError(message);
     }
   };
 
@@ -147,6 +153,18 @@ const PaymentForm: React.FC<{
     }
   };
 
+  if (initError) {
+    return (
+      <div className="space-y-4 text-center py-6">
+        <p className="text-sm text-destructive">{initError}</p>
+        <div className="flex gap-3 justify-center">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={createPaymentIntent}>Try Again</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="p-4 bg-muted rounded-lg">
@@ -155,7 +173,7 @@ const PaymentForm: React.FC<{
           <span className="text-xl font-bold">PKR {plan.price.toLocaleString()}/month</span>
         </div>
       </div>
-      
+
       <div className="p-4 border rounded-lg">
         <CardElement options={{
           style: {
@@ -164,7 +182,7 @@ const PaymentForm: React.FC<{
           }
         }} />
       </div>
-      
+
       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
         <p className="text-sm font-medium text-blue-900 mb-1">🧪 Test Mode - Use Test Card:</p>
         <p className="text-xs text-blue-700 font-mono">
@@ -172,12 +190,12 @@ const PaymentForm: React.FC<{
           Expiry: 12/34 | CVC: 123 | ZIP: 12345
         </p>
       </div>
-      
+
       <div className="flex gap-3">
         <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
           Cancel
         </Button>
-        <Button type="submit" disabled={!stripe || loading} className="flex-1">
+        <Button type="submit" disabled={!stripe || !clientSecret || loading} className="flex-1">
           {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
           Pay PKR {plan.price.toLocaleString()}
         </Button>
@@ -193,6 +211,7 @@ const Subscription: React.FC = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
@@ -203,6 +222,7 @@ const Subscription: React.FC = () => {
   const fetchData = async () => {
     try {
       setIsLoading(true);
+      setLoadError(false);
       const [plansRes, currentRes] = await Promise.all([
         subscriptionApi.getPlans(),
         subscriptionApi.getCurrentPlan()
@@ -211,6 +231,7 @@ const Subscription: React.FC = () => {
       setCurrentSubscription(currentRes.data.data || null);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -327,6 +348,12 @@ const Subscription: React.FC = () => {
             <div className="flex justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
+          ) : loadError ? (
+            <EmptyState
+              title="Failed to load subscription plans"
+              actionLabel="Try Again"
+              onAction={fetchData}
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {plans.map((plan) => {

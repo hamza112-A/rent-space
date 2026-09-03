@@ -16,8 +16,8 @@ const PaymentFailed: React.FC = () => {
         <div className="container mx-auto px-4 max-w-md">
           <Card>
             <CardContent className="p-8 text-center">
-              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <XCircle className="h-10 w-10 text-red-600" />
+              <div className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <XCircle className="h-10 w-10 text-destructive" />
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">{t.payment.failed}</h1>
               <p className="text-muted-foreground mb-6">

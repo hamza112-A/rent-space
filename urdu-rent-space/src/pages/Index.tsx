@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { categories } from '@/lib/categories';
 import { listingApi } from '@/lib/api';
+import ListingCard from '@/components/listings/ListingCard';
+import EmptyState from '@/components/common/EmptyState';
 import { 
   Search, 
   MapPin, 
@@ -23,7 +25,6 @@ import {
   Dog,
   Ship,
   Plane,
-  CheckCircle2,
   SearchCheck,
   CalendarCheck,
   PartyPopper,
@@ -55,6 +56,7 @@ interface Listing {
 
 const Index: React.FC = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -183,52 +185,16 @@ const Index: React.FC = () => {
               ))
             ) : featuredListings.length > 0 ? (
               featuredListings.map((listing) => (
-                <Link key={listing._id} to={`/listing/${listing._id}`}>
-                  <Card className="overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-                    <div className="relative h-48 bg-muted">
-                      {listing.images?.[0]?.url ? (
-                        <img src={listing.images[0].url} alt={listing.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                          No Image
-                        </div>
-                      )}
-                      {listing.verified && (
-                        <Badge className="absolute top-3 left-3 gap-1 bg-gradient-to-r from-amber-400 to-orange-400">
-                          <CheckCircle2 className="w-3 h-3" /> {t.listing.verified}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="p-4">
-                      <h3 className="font-semibold text-foreground mb-2 line-clamp-1">{listing.title}</h3>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
-                        <MapPin className="w-4 h-4" /> {listing.location?.city || 'Pakistan'}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-lg font-bold text-primary">
-                            {t.common.pkr} {(listing.pricing?.daily || listing.pricing?.hourly || 0).toLocaleString()}
-                          </span>
-                          <span className="text-sm text-muted-foreground">/{listing.pricing?.daily ? 'day' : 'hour'}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                          <span className="font-medium">{listing.rating?.average?.toFixed(1) || '5.0'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                </Link>
+                <ListingCard key={listing._id} listing={listing} />
               ))
             ) : (
-              <div className="col-span-4 text-center py-12">
-                <p className="text-muted-foreground">No listings available yet. Be the first to create one!</p>
-                <Link to="/create-listing">
-                  <Button className="mt-4 gap-2">
-                    <Plus className="w-4 h-4" />
-                    Create Listing
-                  </Button>
-                </Link>
+              <div className="col-span-4">
+                <EmptyState
+                  title="No listings available yet"
+                  description="Be the first to create one!"
+                  actionLabel="Create Listing"
+                  onAction={() => navigate('/create-listing')}
+                />
               </div>
             )}
           </div>

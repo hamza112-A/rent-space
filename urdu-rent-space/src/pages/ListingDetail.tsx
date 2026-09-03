@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { listingApi, bookingApi, messageApi } from '@/lib/api';
+import EmptyState from '@/components/common/EmptyState';
 import {
   Star,
   MapPin,
@@ -62,10 +63,12 @@ const ListingDetail: React.FC = () => {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
 
+  const [retryCount, setRetryCount] = useState(0);
+
   useEffect(() => {
     const fetchListing = async () => {
       if (!listingId) return;
-      
+
       try {
         setLoading(true);
         setError(null);
@@ -80,7 +83,7 @@ const ListingDetail: React.FC = () => {
     };
 
     fetchListing();
-  }, [listingId]);
+  }, [listingId, retryCount]);
 
   useEffect(() => {
     const fetchReviews = async () => {
@@ -262,11 +265,17 @@ const ListingDetail: React.FC = () => {
           <div className="container mx-auto px-4 py-8">
             <Card>
               <CardContent className="p-12 text-center">
-                <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-                <p className="text-destructive mb-4">{error || 'Listing not found'}</p>
-                <Link to="/">
-                  <Button>Go Home</Button>
-                </Link>
+                <EmptyState icon={AlertCircle} title={error || 'Listing not found'} />
+                <div className="flex items-center justify-center gap-3">
+                  {error && (
+                    <Button variant="outline" onClick={() => setRetryCount((c) => c + 1)}>
+                      Try Again
+                    </Button>
+                  )}
+                  <Link to="/">
+                    <Button>Go Home</Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -522,9 +531,9 @@ const ListingDetail: React.FC = () => {
 
               {/* Safety Guidelines */}
               {listing.safetyGuidelines?.categorySpecific?.length > 0 && (
-                <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+                <Card className="border-amber-200 bg-amber-50/50">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+                    <CardTitle className="flex items-center gap-2 text-amber-900">
                       <Shield className="h-5 w-5" />
                       Safety Guidelines
                     </CardTitle>
@@ -536,7 +545,7 @@ const ListingDetail: React.FC = () => {
                           key={index} 
                           className={`p-4 rounded-lg ${
                             guideline.mandatory 
-                              ? 'bg-amber-100 dark:bg-amber-900/30 border border-amber-300' 
+                              ? 'bg-amber-100 border border-amber-300' 
                               : 'bg-background/50'
                           }`}
                         >
@@ -558,8 +567,8 @@ const ListingDetail: React.FC = () => {
                     {listing.safetyGuidelines.emergencyContact && (
                       <>
                         <Separator className="my-4" />
-                        <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200">
-                          <h4 className="font-semibold text-red-900 dark:text-red-100 mb-2 flex items-center gap-2">
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                          <h4 className="font-semibold text-red-900 mb-2 flex items-center gap-2">
                             <AlertCircle className="h-4 w-4" />
                             Emergency Contact
                           </h4>
@@ -582,9 +591,9 @@ const ListingDetail: React.FC = () => {
               {(listing.disclaimers?.damage?.enabled || 
                 listing.disclaimers?.lostItems?.enabled || 
                 listing.disclaimers?.liability?.enabled) && (
-                <Card className="border-red-200 bg-red-50/50 dark:bg-red-950/20">
+                <Card className="border-red-200 bg-red-50/50">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-red-900 dark:text-red-100">
+                    <CardTitle className="flex items-center gap-2 text-red-900">
                       <AlertCircle className="h-5 w-5" />
                       Important Disclaimers
                     </CardTitle>
@@ -633,8 +642,8 @@ const ListingDetail: React.FC = () => {
                     )}
 
                     {listing.disclaimers.termsAccepted?.required && (
-                      <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/20 border border-amber-300">
-                        <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                      <div className="p-3 rounded-lg bg-amber-100 border border-amber-300">
+                        <p className="text-sm font-medium text-amber-900">
                           ✓ By booking this listing, you acknowledge and accept all safety guidelines and disclaimers.
                         </p>
                       </div>
@@ -659,7 +668,7 @@ const ListingDetail: React.FC = () => {
                       <Skeleton className="h-24 w-full" />
                     </div>
                   ) : reviews.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-4">No reviews yet</p>
+                    <EmptyState title="No reviews yet" />
                   ) : (
                     reviews.map((review) => (
                     <div key={review._id} className="p-4 rounded-lg bg-muted/50">
@@ -984,8 +993,8 @@ const ListingDetail: React.FC = () => {
               {listing.safetyGuidelines?.categorySpecific?.filter((g: any) => g.mandatory).length > 0 && (
                 <>
                   <Separator />
-                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200">
-                    <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <h4 className="text-sm font-semibold text-amber-900 mb-2 flex items-center gap-2">
                       <Shield className="h-4 w-4" />
                       Mandatory Safety Requirements
                     </h4>
@@ -1011,8 +1020,8 @@ const ListingDetail: React.FC = () => {
                 <>
                   <Separator />
                   <div className="space-y-3">
-                    <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 space-y-3">
-                      <h4 className="text-sm font-semibold text-red-900 dark:text-red-100 flex items-center gap-2">
+                    <div className="p-4 rounded-lg bg-red-50 border border-red-200 space-y-3">
+                      <h4 className="text-sm font-semibold text-red-900 flex items-center gap-2">
                         <AlertCircle className="h-4 w-4" />
                         Important Terms & Conditions
                       </h4>

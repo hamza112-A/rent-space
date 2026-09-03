@@ -81,8 +81,8 @@ const PaymentSuccess: React.FC = () => {
         <div className="container mx-auto px-4 max-w-md">
           <Card>
             <CardContent className="p-8 text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle className="h-10 w-10 text-green-600" />
+              <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="h-10 w-10 text-success" />
               </div>
               <h1 className="text-2xl font-bold text-foreground mb-2">{t.payment.success}</h1>
               <p className="text-muted-foreground mb-6">

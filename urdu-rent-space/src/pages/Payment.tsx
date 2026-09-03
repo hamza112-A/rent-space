@@ -5,11 +5,10 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { paymentApi } from '@/lib/api';
 import { toast } from 'sonner';
-import { CreditCard, Lock, CheckCircle, AlertCircle } from 'lucide-react';
+import { CreditCard, Lock, AlertCircle } from 'lucide-react';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_placeholder');
 
@@ -21,18 +20,23 @@ const CheckoutForm: React.FC<{ amount: number; bookingId?: string }> = ({ amount
   const [loading, setLoading] = useState(false);
   const [clientSecret, setClientSecret] = useState('');
   const [paymentId, setPaymentId] = useState('');
+  const [initError, setInitError] = useState('');
 
   useEffect(() => {
     createPaymentIntent();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amount]);
 
   const createPaymentIntent = async () => {
     try {
+      setInitError('');
       const response = await paymentApi.createIntent({ bookingId, amount, currency: 'pkr' });
       setClientSecret(response.data.data.clientSecret);
       setPaymentId(response.data.data.paymentId);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to initialize payment');
+      const message = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to initialize payment';
+      toast.error(message);
+      setInitError(message);
     }
   };
 
@@ -60,6 +64,20 @@ const CheckoutForm: React.FC<{ amount: number; bookingId?: string }> = ({ amount
   };
 
 
+  if (initError) {
+    return (
+      <div className="space-y-4 text-center py-6">
+        <div className="flex items-center justify-center gap-2 text-destructive text-sm">
+          <AlertCircle className="h-4 w-4" />
+          <span>{initError}</span>
+        </div>
+        <Button variant="outline" onClick={createPaymentIntent}>
+          Try Again
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="p-4 border rounded-lg bg-muted/50">
@@ -74,7 +92,7 @@ const CheckoutForm: React.FC<{ amount: number; bookingId?: string }> = ({ amount
         <Lock className="h-4 w-4" />
         <span>Your payment is secure and encrypted</span>
       </div>
-      <Button type="submit" disabled={!stripe || loading} className="w-full" size="lg">
+      <Button type="submit" disabled={!stripe || !clientSecret || loading} className="w-full" size="lg">
         {loading ? t.common.loading : `Pay PKR ${amount.toLocaleString()}`}
       </Button>
       <p className="text-xs text-center text-muted-foreground">

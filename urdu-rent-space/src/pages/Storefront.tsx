@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { storefrontApi } from '@/lib/api';
-import { MapPin, Star, Building2, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Star, Building2 } from 'lucide-react';
+import ListingCard from '@/components/listings/ListingCard';
+import EmptyState from '@/components/common/EmptyState';
 
 interface Listing {
   _id: string;
@@ -34,20 +36,22 @@ const Storefront: React.FC = () => {
   const [data, setData] = useState<StorefrontData | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!slug) return;
+    setLoading(true);
+    setNotFound(false);
+    setFetchError(false);
     storefrontApi.getPublic(slug)
       .then((res) => setData(res.data.data))
-      .catch(() => setNotFound(true))
+      .catch((err) => {
+        if (err?.response?.status === 404) setNotFound(true);
+        else setFetchError(true);
+      })
       .finally(() => setLoading(false));
-  }, [slug]);
-
-  const formatPrice = (listing: Listing) => {
-    const price = listing.pricing?.daily ?? listing.pricing?.hourly ?? listing.pricing?.weekly ?? listing.pricing?.monthly ?? 0;
-    const unit = listing.pricing?.daily ? 'day' : listing.pricing?.hourly ? 'hour' : listing.pricing?.weekly ? 'week' : 'month';
-    return `PKR ${price.toLocaleString()}/${unit}`;
-  };
+  }, [slug, retryCount]);
 
   if (loading) {
     return (
@@ -63,13 +67,20 @@ const Storefront: React.FC = () => {
     );
   }
 
-  if (notFound || !data) {
+  if (notFound || fetchError || !data) {
     return (
       <Layout>
         <div className="pt-32 container mx-auto px-4 py-12 text-center">
-          <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-foreground mb-2">Storefront not found</h1>
-          <p className="text-muted-foreground">This page doesn't exist or isn't published.</p>
+          <EmptyState
+            icon={Building2}
+            title={fetchError ? 'Failed to load storefront' : 'Storefront not found'}
+            description={fetchError ? undefined : "This page doesn't exist or isn't published."}
+          />
+          {fetchError && (
+            <Button variant="outline" onClick={() => setRetryCount((c) => c + 1)}>
+              Try Again
+            </Button>
+          )}
         </div>
       </Layout>
     );
@@ -125,40 +136,16 @@ const Storefront: React.FC = () => {
           </h2>
 
           {listings.length === 0 ? (
-            <Card>
-              <CardContent className="p-12 text-center text-muted-foreground">
-                No active listings right now.
-              </CardContent>
-            </Card>
+            <EmptyState title="No active listings right now" />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pb-16">
               {listings.map((listing) => (
-                <Link key={listing._id} to={`/listing/${listing._id}`}>
-                  <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full">
-                    <div className="h-40 bg-muted relative">
-                      {listing.images?.[0]?.url ? (
-                        <img src={listing.images[0].url} alt={listing.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
-                          No Image
-                        </div>
-                      )}
-                      {listing.featured && (
-                        <Badge className="absolute top-2 right-2 bg-amber-500/90 text-white gap-1">
-                          <Sparkles className="h-3 w-3" /> Featured
-                        </Badge>
-                      )}
-                    </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-semibold text-foreground truncate">{listing.title}</h3>
-                      <p className="text-primary font-bold mt-1">{formatPrice(listing)}</p>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
-                        <MapPin className="h-3 w-3" />
-                        <span className="truncate">{listing.location?.area}, {listing.location?.city}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                <ListingCard
+                  key={listing._id}
+                  listing={listing}
+                  showRating={false}
+                  locationFormat="area-city"
+                />
               ))}
             </div>
           )}

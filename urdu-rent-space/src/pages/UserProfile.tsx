@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { userApi } from '@/lib/api';
 import { toast } from 'sonner';
+import EmptyState from '@/components/common/EmptyState';
 import {
   Star,
   MapPin,
@@ -17,7 +18,6 @@ import {
   CheckCircle2,
   Shield,
   MessageCircle,
-  User,
   Package,
   Clock,
   TrendingUp,
@@ -44,6 +44,7 @@ const UserProfile: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const { t } = useLanguage();
   const [user, setUser] = useState<any>(null);
+  const [fetchError, setFetchError] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -60,10 +61,12 @@ const UserProfile: React.FC = () => {
     
     try {
       setLoading(true);
+      setFetchError(false);
       const response = await userApi.getPublicProfile(userId);
       setUser(response.data.data);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to load user profile');
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
@@ -107,11 +110,17 @@ const UserProfile: React.FC = () => {
           <div className="container mx-auto px-4 py-8">
             <Card>
               <CardContent className="p-12 text-center">
-                <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground mb-4">User not found</p>
-                <Link to="/">
-                  <Button>Go Home</Button>
-                </Link>
+                <EmptyState title={fetchError ? 'Failed to load user profile' : 'User not found'} />
+                <div className="flex items-center justify-center gap-3">
+                  {fetchError && (
+                    <Button variant="outline" onClick={() => fetchUserProfile()}>
+                      Try Again
+                    </Button>
+                  )}
+                  <Link to="/">
+                    <Button>Go Home</Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -289,10 +298,7 @@ const UserProfile: React.FC = () => {
                     ))}
                   </div>
                 ) : reviews.length === 0 ? (
-                  <div className="text-center py-12">
-                    <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No reviews yet</p>
-                  </div>
+                  <EmptyState icon={MessageCircle} title="No reviews yet" />
                 ) : (
                   <>
                     {reviews.map((review) => (
