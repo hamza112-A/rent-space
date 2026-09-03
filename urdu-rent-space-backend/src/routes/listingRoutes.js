@@ -184,7 +184,7 @@ router.get('/user/my-listings', protect, ownerOnly, asyncHandler(async (req, res
 
 // @route   GET /api/v1/listings
 router.get('/', optionalAuth, asyncHandler(async (req, res) => {
-  const { category, city, location, minPrice, maxPrice, search, query, sort, page = 1, limit = 10 } = req.query;
+  const { category, subcategory, city, location, minPrice, maxPrice, verified, instantBook, minRating, search, query, sort, page = 1, limit = 10 } = req.query;
   
   // Lazily clear expired boosts so `featured` stays accurate without a cron
   // job — same lazy-sync pattern used for subscription plan details.
@@ -196,7 +196,11 @@ router.get('/', optionalAuth, asyncHandler(async (req, res) => {
   const dbQuery = { status: 'active' };
 
   if (category) dbQuery.category = category;
-  
+  if (subcategory) dbQuery.subcategory = subcategory;
+  if (verified === 'true') dbQuery.verified = true;
+  if (instantBook === 'true') dbQuery['availability.instantBook'] = true;
+  if (minRating) dbQuery['rating.average'] = { $gte: Number(minRating) };
+
   // Handle location search (city or area)
   if (city || location) {
     const locationSearch = escapeRegex(city || location);

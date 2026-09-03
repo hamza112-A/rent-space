@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,10 @@ import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getCategoryById } from '@/lib/categories';
 import { listingApi } from '@/lib/api';
+import ListingCard from '@/components/listings/ListingCard';
+import EmptyState from '@/components/common/EmptyState';
+import FilterBar, { ActiveFilter } from '@/components/filters/FilterBar';
+import { useFilterState } from '@/hooks/useFilterState';
 import {
   Search,
   MapPin,
@@ -18,7 +22,6 @@ import {
   Filter,
   Grid3X3,
   List,
-  CheckCircle2,
   SlidersHorizontal,
   X,
   Building2,
@@ -69,7 +72,7 @@ interface Listing {
   availability?: { instantBook?: boolean };
 }
 
-// Debounce hook for live search
+// Debounce hook — smooths API calls triggered by fast typing/dragging
 const useDebounce = <T,>(value: T, delay: number): T => {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -82,6 +85,22 @@ const useDebounce = <T,>(value: T, delay: number): T => {
   }, [value, delay]);
 
   return debouncedValue;
+};
+
+const PRICE_MIN = 0;
+const PRICE_MAX = 200000;
+
+// Module-level so useFilterState's memoized deps stay stable across renders.
+const FILTER_DEFAULTS = {
+  subcategory: '',
+  minPrice: PRICE_MIN,
+  maxPrice: PRICE_MAX,
+  verified: false,
+  instantBook: false,
+  rating: 0,
+  sort: 'newest',
+  q: '',
+  location: '',
 };
 
 // Price Range Slider Component with live preview
@@ -119,25 +138,16 @@ const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
     const numValue = parseInt(inputValue) || 0;
     const newValue = [...localValue];
     newValue[index] = Math.max(min, Math.min(max, numValue));
-    
+
     // Ensure min <= max
     if (index === 0 && newValue[0] > newValue[1]) {
       newValue[0] = newValue[1];
     } else if (index === 1 && newValue[1] < newValue[0]) {
       newValue[1] = newValue[0];
     }
-    
+
     setLocalValue(newValue);
     onChange(newValue);
-  };
-
-  const formatPrice = (price: number) => {
-    if (price >= 100000) {
-      return `${(price / 100000).toFixed(1)}L`;
-    } else if (price >= 1000) {
-      return `${(price / 1000).toFixed(0)}K`;
-    }
-    return price.toString();
   };
 
   // Quick select presets
@@ -233,25 +243,24 @@ const PriceRangeSlider: React.FC<PriceRangeSliderProps> = ({
   );
 };
 
+const RATING_OPTIONS = [4, 4.5, 5];
+
 const CategoryPage: React.FC = () => {
   const { categoryId } = useParams<{ categoryId: string }>();
   const { t } = useLanguage();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [priceRange, setPriceRange] = useState([0, 200000]);
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [listings, setListings] = useState<Listing[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState('newest');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [locationQuery, setLocationQuery] = useState('');
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [instantBookOnly, setInstantBookOnly] = useState(false);
 
-  // Debounce search inputs (300ms delay)
-  const debouncedSearch = useDebounce(searchQuery, 300);
-  const debouncedLocation = useDebounce(locationQuery, 300);
-  // Debounce price range (200ms for smoother slider experience)
-  const debouncedPriceRange = useDebounce(priceRange, 200);
+  const filters = useFilterState(FILTER_DEFAULTS);
+
+  // Debounce URL-driven values that change rapidly (typing, slider drag)
+  // before they trigger a fetch — the URL itself updates immediately.
+  const debouncedSearch = useDebounce(filters.values.q, 300);
+  const debouncedLocation = useDebounce(filters.values.location, 300);
+  const debouncedMinPrice = useDebounce(filters.values.minPrice, 200);
+  const debouncedMaxPrice = useDebounce(filters.values.maxPrice, 200);
 
   const category = categoryId ? getCategoryById(categoryId) : null;
   const CategoryIcon = category ? categoryIcons[category.id] || Building2 : Building2;
@@ -261,52 +270,108 @@ const CategoryPage: React.FC = () => {
       setLoading(true);
       const params: any = { limit: 50 };
       if (categoryId) params.category = categoryId;
-      if (selectedSubcategory) params.subcategory = selectedSubcategory;
-      if (sortBy) params.sort = sortBy;
+      if (filters.values.subcategory) params.subcategory = filters.values.subcategory;
+      if (filters.values.sort) params.sort = filters.values.sort;
       if (debouncedSearch) params.query = debouncedSearch;
       if (debouncedLocation) params.location = debouncedLocation;
-      
+      if (debouncedMinPrice > PRICE_MIN) params.minPrice = debouncedMinPrice;
+      if (debouncedMaxPrice < PRICE_MAX) params.maxPrice = debouncedMaxPrice;
+      if (filters.values.verified) params.verified = true;
+      if (filters.values.instantBook) params.instantBook = true;
+      if (filters.values.rating > 0) params.minRating = filters.values.rating;
+
       const response = await listingApi.search(params);
       setListings(response.data?.data || []);
+      setTotalCount(response.data?.pagination?.total ?? response.data?.data?.length ?? 0);
     } catch (err) {
       console.error('Failed to fetch listings:', err);
     } finally {
       setLoading(false);
     }
-  }, [categoryId, selectedSubcategory, sortBy, debouncedSearch, debouncedLocation]);
+  }, [
+    categoryId,
+    filters.values.subcategory,
+    filters.values.sort,
+    filters.values.verified,
+    filters.values.instantBook,
+    filters.values.rating,
+    debouncedSearch,
+    debouncedLocation,
+    debouncedMinPrice,
+    debouncedMaxPrice,
+  ]);
 
   useEffect(() => {
     fetchListings();
   }, [fetchListings]);
 
-  // Filter listings by price range, verified, instant book (client-side with debounced values)
-  const filteredListings = listings.filter((listing) => {
-    const price = listing.pricing?.daily || listing.pricing?.hourly || 0;
-    if (price < debouncedPriceRange[0] || price > debouncedPriceRange[1]) return false;
-    if (verifiedOnly && !listing.verified) return false;
-    if (instantBookOnly && !listing.availability?.instantBook) return false;
-    return true;
-  });
+  // Filters shown in the sidebar/sheet panel (excludes search/location/sort,
+  // which live in the hero search bar and toolbar respectively).
+  const panelFilterCount = [
+    !!filters.values.subcategory,
+    filters.values.minPrice > PRICE_MIN || filters.values.maxPrice < PRICE_MAX,
+    filters.values.verified,
+    filters.values.instantBook,
+    filters.values.rating > 0,
+  ].filter(Boolean).length;
 
-  // Check if any filters are active
-  const hasActiveFilters = priceRange[0] > 0 || priceRange[1] < 200000 || selectedSubcategory || verifiedOnly || instantBookOnly;
-
-  const resetFilters = () => {
-    setPriceRange([0, 200000]);
-    setSelectedSubcategory(null);
-    setVerifiedOnly(false);
-    setInstantBookOnly(false);
+  const resetPanelFilters = () => {
+    filters.setValues({
+      subcategory: '',
+      minPrice: PRICE_MIN,
+      maxPrice: PRICE_MAX,
+      verified: false,
+      instantBook: false,
+      rating: 0,
+    });
   };
+
+  const subcategoryLabel = category?.subcategories.find((s) => s.id === filters.values.subcategory);
+
+  // All active filters/search terms, shown as chips in the main toolbar.
+  const activeChips = useMemo<ActiveFilter[]>(() => {
+    const chips: ActiveFilter[] = [];
+    if (filters.values.subcategory) {
+      chips.push({
+        key: 'subcategory',
+        label: subcategoryLabel ? t.subcategories[subcategoryLabel.nameKey as keyof typeof t.subcategories] : filters.values.subcategory,
+        onRemove: () => filters.setValue('subcategory', ''),
+      });
+    }
+    if (filters.values.minPrice > PRICE_MIN || filters.values.maxPrice < PRICE_MAX) {
+      chips.push({
+        key: 'price',
+        label: `PKR ${filters.values.minPrice.toLocaleString()} - ${filters.values.maxPrice.toLocaleString()}`,
+        onRemove: () => filters.setValues({ minPrice: PRICE_MIN, maxPrice: PRICE_MAX }),
+      });
+    }
+    if (filters.values.verified) {
+      chips.push({ key: 'verified', label: t.filters.verified, onRemove: () => filters.setValue('verified', false) });
+    }
+    if (filters.values.instantBook) {
+      chips.push({ key: 'instantBook', label: t.filters.instantBook, onRemove: () => filters.setValue('instantBook', false) });
+    }
+    if (filters.values.rating > 0) {
+      chips.push({ key: 'rating', label: `${filters.values.rating}+ ★`, onRemove: () => filters.setValue('rating', 0) });
+    }
+    if (filters.values.q) {
+      chips.push({ key: 'q', label: `"${filters.values.q}"`, onRemove: () => filters.setValue('q', '') });
+    }
+    if (filters.values.location) {
+      chips.push({ key: 'location', label: filters.values.location, onRemove: () => filters.setValue('location', '') });
+    }
+    return chips;
+  }, [filters, subcategoryLabel, t]);
 
   const FilterContent = () => (
     <div className="space-y-6">
       {/* Active Filters Count */}
-      {hasActiveFilters && (
+      {panelFilterCount > 0 && (
         <div className="flex items-center justify-between p-2 bg-primary/10 rounded-lg">
           <span className="text-sm text-primary font-medium">
-            Filters active
+            {panelFilterCount} filter{panelFilterCount > 1 ? 's' : ''} active
           </span>
-          <Button variant="ghost" size="sm" onClick={resetFilters} className="h-6 text-xs">
+          <Button variant="ghost" size="sm" onClick={resetPanelFilters} className="h-7 text-xs">
             Clear all
           </Button>
         </div>
@@ -320,8 +385,8 @@ const CategoryPage: React.FC = () => {
             {category.subcategories.map((sub) => (
               <label key={sub.id} className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
-                  checked={selectedSubcategory === sub.id}
-                  onCheckedChange={(checked) => setSelectedSubcategory(checked ? sub.id : null)}
+                  checked={filters.values.subcategory === sub.id}
+                  onCheckedChange={(checked) => filters.setValue('subcategory', checked ? sub.id : '')}
                 />
                 <span className="text-sm">{t.subcategories[sub.nameKey as keyof typeof t.subcategories]}</span>
               </label>
@@ -334,15 +399,15 @@ const CategoryPage: React.FC = () => {
       <div>
         <h4 className="font-semibold mb-3 flex items-center gap-2">
           {t.filters.priceRange}
-          {(priceRange[0] > 0 || priceRange[1] < 200000) && (
+          {(filters.values.minPrice > PRICE_MIN || filters.values.maxPrice < PRICE_MAX) && (
             <Badge variant="secondary" className="text-xs">Active</Badge>
           )}
         </h4>
         <PriceRangeSlider
-          value={priceRange}
-          onChange={setPriceRange}
-          min={0}
-          max={200000}
+          value={[filters.values.minPrice, filters.values.maxPrice]}
+          onChange={([min, max]) => filters.setValues({ minPrice: min, maxPrice: max }, { replace: true })}
+          min={PRICE_MIN}
+          max={PRICE_MAX}
           step={1000}
         />
       </div>
@@ -350,9 +415,9 @@ const CategoryPage: React.FC = () => {
       {/* Verified Only */}
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
-          <Checkbox 
-            checked={verifiedOnly}
-            onCheckedChange={(checked) => setVerifiedOnly(checked === true)}
+          <Checkbox
+            checked={filters.values.verified}
+            onCheckedChange={(checked) => filters.setValue('verified', checked === true)}
           />
           <span className="text-sm">{t.filters.verified}</span>
         </label>
@@ -361,9 +426,9 @@ const CategoryPage: React.FC = () => {
       {/* Instant Book */}
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
-          <Checkbox 
-            checked={instantBookOnly}
-            onCheckedChange={(checked) => setInstantBookOnly(checked === true)}
+          <Checkbox
+            checked={filters.values.instantBook}
+            onCheckedChange={(checked) => filters.setValue('instantBook', checked === true)}
           />
           <span className="text-sm">{t.filters.instantBook}</span>
         </label>
@@ -373,17 +438,26 @@ const CategoryPage: React.FC = () => {
       <div>
         <h4 className="font-semibold mb-3">{t.filters.rating}</h4>
         <div className="flex gap-2">
-          {[4, 4.5, 5].map((rating) => (
-            <Button key={rating} variant="outline" size="sm" className="flex items-center gap-1">
-              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-              {rating}+
-            </Button>
-          ))}
+          {RATING_OPTIONS.map((rating) => {
+            const isActive = filters.values.rating === rating;
+            return (
+              <Button
+                key={rating}
+                variant={isActive ? 'default' : 'outline'}
+                size="sm"
+                className="flex items-center gap-1"
+                onClick={() => filters.setValue('rating', isActive ? 0 : rating)}
+              >
+                <Star className={`w-3 h-3 ${isActive ? 'fill-primary-foreground' : 'fill-amber-400'} text-amber-400`} />
+                {rating}+
+              </Button>
+            );
+          })}
         </div>
       </div>
 
       <div className="flex gap-2 pt-4">
-        <Button variant="outline" className="flex-1" onClick={resetFilters}>
+        <Button variant="outline" className="flex-1" onClick={resetPanelFilters}>
           {t.filters.reset}
         </Button>
       </div>
@@ -407,7 +481,7 @@ const CategoryPage: React.FC = () => {
                   {category ? t.categories[category.nameKey as keyof typeof t.categories] : 'All Listings'}
                 </h1>
                 <p className="text-primary-foreground/80">
-                  {filteredListings.length} {t.categories.listings} available
+                  {totalCount} {t.categories.listings} available
                 </p>
               </div>
             </div>
@@ -417,27 +491,27 @@ const CategoryPage: React.FC = () => {
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input 
-                    placeholder={t.hero.searchPlaceholder} 
+                  <Input
+                    placeholder={t.hero.searchPlaceholder}
                     className="pl-10 border border-input bg-background text-foreground"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={filters.values.q}
+                    onChange={(e) => filters.setValue('q', e.target.value, { replace: true })}
                   />
                 </div>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input 
-                    placeholder={t.hero.locationPlaceholder} 
+                  <Input
+                    placeholder={t.hero.locationPlaceholder}
                     className="pl-10 border border-input bg-background text-foreground w-40"
-                    value={locationQuery}
-                    onChange={(e) => setLocationQuery(e.target.value)}
+                    value={filters.values.location}
+                    onChange={(e) => filters.setValue('location', e.target.value, { replace: true })}
                   />
                 </div>
-                {(searchQuery || locationQuery) && (
-                  <Button 
-                    variant="ghost" 
+                {(filters.values.q || filters.values.location) && (
+                  <Button
+                    variant="ghost"
                     size="icon"
-                    onClick={() => { setSearchQuery(''); setLocationQuery(''); }}
+                    onClick={() => filters.setValues({ q: '', location: '' })}
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -463,55 +537,64 @@ const CategoryPage: React.FC = () => {
             {/* Listings */}
             <main className="flex-1">
               {/* Toolbar */}
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  {/* Mobile Filter Button */}
-                  <Sheet>
-                    <SheetTrigger asChild>
-                      <Button variant="outline" className="lg:hidden gap-2">
-                        <Filter className="w-4 h-4" />
-                        {t.filters.title}
-                      </Button>
-                    </SheetTrigger>
-                    <SheetContent side="left">
-                      <SheetHeader>
-                        <SheetTitle>{t.filters.title}</SheetTitle>
-                      </SheetHeader>
-                      <div className="mt-6">
-                        <FilterContent />
-                      </div>
-                    </SheetContent>
-                  </Sheet>
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    {/* Mobile Filter Button */}
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <Button variant="outline" className="lg:hidden gap-2 relative">
+                          <Filter className="w-4 h-4" />
+                          {t.filters.title}
+                          {panelFilterCount > 0 && (
+                            <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs">
+                              {panelFilterCount}
+                            </Badge>
+                          )}
+                        </Button>
+                      </SheetTrigger>
+                      <SheetContent side="left">
+                        <SheetHeader>
+                          <SheetTitle>{t.filters.title}</SheetTitle>
+                        </SheetHeader>
+                        <div className="mt-6">
+                          <FilterContent />
+                        </div>
+                      </SheetContent>
+                    </Sheet>
 
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-44">
-                      <SelectValue placeholder={t.filters.sortBy} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="newest">{t.filters.newest}</SelectItem>
-                      <SelectItem value="price_low">{t.filters.priceLowHigh}</SelectItem>
-                      <SelectItem value="price_high">{t.filters.priceHighLow}</SelectItem>
-                      <SelectItem value="rating">{t.filters.topRated}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <Select value={filters.values.sort} onValueChange={(v) => filters.setValue('sort', v)}>
+                      <SelectTrigger className="w-36 sm:w-44">
+                        <SelectValue placeholder={t.filters.sortBy} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="newest">{t.filters.newest}</SelectItem>
+                        <SelectItem value="price_low">{t.filters.priceLowHigh}</SelectItem>
+                        <SelectItem value="price_high">{t.filters.priceHighLow}</SelectItem>
+                        <SelectItem value="rating">{t.filters.topRated}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                      size="icon"
+                      onClick={() => setViewMode('grid')}
+                    >
+                      <Grid3X3 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant={viewMode === 'list' ? 'default' : 'ghost'}
+                      size="icon"
+                      onClick={() => setViewMode('list')}
+                    >
+                      <List className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                    size="icon"
-                    onClick={() => setViewMode('grid')}
-                  >
-                    <Grid3X3 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant={viewMode === 'list' ? 'default' : 'ghost'}
-                    size="icon"
-                    onClick={() => setViewMode('list')}
-                  >
-                    <List className="w-4 h-4" />
-                  </Button>
-                </div>
+                <FilterBar activeFilters={activeChips} onClearAll={filters.resetAll} />
               </div>
 
               {/* Listings Grid */}
@@ -530,61 +613,14 @@ const CategoryPage: React.FC = () => {
                 </div>
               ) : (
                 <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6' : 'space-y-4'}>
-                  {filteredListings.map((listing) => {
-                    const price = listing.pricing?.daily || listing.pricing?.hourly || 0;
-                    const priceType = listing.pricing?.daily ? 'day' : 'hour';
-                    return (
-                      <Link key={listing._id} to={`/listing/${listing._id}`}>
-                        <Card className={`overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${viewMode === 'list' ? 'flex' : ''}`}>
-                          <div className={`relative ${viewMode === 'list' ? 'w-48 flex-shrink-0' : 'h-48'}`}>
-                            {listing.images?.[0]?.url ? (
-                              <img src={listing.images[0].url} alt={listing.title} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
-                                No Image
-                              </div>
-                            )}
-                            {listing.verified && (
-                              <Badge className="absolute top-3 left-3 gap-1 bg-gradient-to-r from-amber-400 to-orange-400">
-                                <CheckCircle2 className="w-3 h-3" /> {t.listing.verified}
-                              </Badge>
-                            )}
-                            {listing.availability?.instantBook && (
-                              <Badge variant="secondary" className="absolute top-3 right-3">
-                                {t.listing.instantBook}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="p-4 flex-1">
-                            <h3 className="font-semibold text-foreground mb-2 line-clamp-1">{listing.title}</h3>
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
-                              <MapPin className="w-4 h-4" /> {listing.location?.city || 'Pakistan'}
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <span className="text-lg font-bold text-primary">PKR {price.toLocaleString()}</span>
-                                <span className="text-sm text-muted-foreground">/{priceType}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                                <span className="font-medium">{listing.rating?.average?.toFixed(1) || '5.0'}</span>
-                                {listing.rating?.count && (
-                                  <span className="text-muted-foreground text-sm">({listing.rating.count})</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </Card>
-                      </Link>
-                    );
-                  })}
+                  {listings.map((listing) => (
+                    <ListingCard key={listing._id} listing={listing} variant={viewMode} />
+                  ))}
                 </div>
               )}
 
-              {filteredListings.length === 0 && (
-                <div className="text-center py-16">
-                  <p className="text-muted-foreground text-lg">{t.common.noResults}</p>
-                </div>
+              {!loading && listings.length === 0 && (
+                <EmptyState title={t.common.noResults} />
               )}
             </main>
           </div>

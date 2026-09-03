@@ -160,6 +160,7 @@ export const listingApi = {
     query?: string;
     category?: string;
     subcategory?: string;
+    location?: string;
     lat?: number;
     lng?: number;
     radius?: number;
@@ -170,6 +171,7 @@ export const listingApi = {
     endDate?: string;
     verified?: boolean;
     instantBook?: boolean;
+    minRating?: number;
     sort?: string;
     page?: number;
     limit?: number;
@@ -353,7 +355,7 @@ export const adminApi = {
   deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
   
   // Listing Management
-  getListings: (params?: { page?: number; limit?: number; status?: string; category?: string }) =>
+  getListings: (params?: { page?: number; limit?: number; status?: string; category?: string; search?: string }) =>
     api.get('/admin/listings', { params }),
   updateListingStatus: (listingId: string, data: { status: string; reason?: string }) =>
     api.put(`/admin/listings/${listingId}/status`, data),

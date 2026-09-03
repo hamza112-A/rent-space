@@ -168,10 +168,14 @@ router.delete('/users/:id', requireAdminRole(), asyncHandler(async (req, res) =>
 
 // ==================== LISTING MANAGEMENT ====================
 router.get('/listings', requireAdminRole('support'), asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, status, category } = req.query;
+  const { page = 1, limit = 20, status, category, search } = req.query;
   const query = {};
   if (status) query.status = status;
   if (category) query.category = category;
+  if (search) {
+    const safeSearch = escapeRegex(search);
+    query.$or = [{ title: new RegExp(safeSearch, 'i') }, { titleUrdu: new RegExp(safeSearch, 'i') }];
+  }
 
   const listings = await Listing.find(query).populate('owner', 'fullName email phone').skip((page - 1) * limit).limit(Number(limit)).sort({ createdAt: -1 });
   const total = await Listing.countDocuments(query);
