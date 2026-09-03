@@ -42,10 +42,19 @@ const storefrontRoutes = require('./routes/storefrontRoutes');
 const app = express();
 const server = createServer(app);
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:3000',
+  process.env.ADMIN_FRONTEND_URL || 'http://localhost:3001',
+  'http://localhost:8080',
+  'http://localhost:5173'
+];
+const vercelPreviewOrigin = /^https:\/\/rent-space-[a-z0-9]+-hamzas-projects-b2b7207b\.vercel\.app$/;
+const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin) || vercelPreviewOrigin.test(origin);
+
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => callback(null, isAllowedOrigin(origin)),
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -148,12 +157,13 @@ const authLimiter = rateLimit({
 
 // CORS configuration
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    process.env.ADMIN_FRONTEND_URL || 'http://localhost:3001',
-    'http://localhost:8080',
-    'http://localhost:5173'
-  ],
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
