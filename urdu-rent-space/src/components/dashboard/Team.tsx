@@ -38,6 +38,7 @@ const Team: React.FC = () => {
   const [ineligible, setIneligible] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const fetchOrg = async () => {
     try {
@@ -93,11 +94,14 @@ const Team: React.FC = () => {
   const handleRemove = async (userId: string, name: string) => {
     if (!confirm(`Remove ${name} from your team?`)) return;
     try {
+      setRemovingId(userId);
       await organizationApi.removeMember(userId);
       setOrg((prev) => prev && { ...prev, members: prev.members.filter((m) => m.user._id !== userId) });
       toast.success('Member removed');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to remove member');
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -210,8 +214,13 @@ const Team: React.FC = () => {
                     size="icon"
                     className="text-destructive hover:text-destructive"
                     onClick={() => handleRemove(member.user._id, member.user.fullName)}
+                    disabled={removingId === member.user._id}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    {removingId === member.user._id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               ) : (
