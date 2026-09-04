@@ -107,6 +107,7 @@ const AdminDisputes: React.FC = () => {
   const [showResolveDialog, setShowResolveDialog] = useState(false);
   const [filter, setFilter] = useState('all');
   const [newMessage, setNewMessage] = useState('');
+  const [actionSubmitting, setActionSubmitting] = useState<'assign' | 'status' | 'message' | 'resolve' | null>(null);
 
   // Resolution form
   const [resolutionForm, setResolutionForm] = useState({
@@ -159,61 +160,71 @@ const AdminDisputes: React.FC = () => {
 
   const handleAssignToMe = async () => {
     if (!selectedDispute) return;
-    
+
     try {
+      setActionSubmitting('assign');
       await api.put(`/disputes/${selectedDispute._id}/assign`, {
         adminId: user?._id
       });
-      
+
       toast.success('Success', { description: 'Dispute assigned to you' });
-      
+
       fetchDisputes();
       if (selectedDispute) {
         fetchDisputeDetails(selectedDispute._id);
       }
     } catch (error: any) {
       toast.error('Error', { description: error.response?.data?.message || 'Failed to assign dispute' });
+    } finally {
+      setActionSubmitting(null);
     }
   };
 
   const handleUpdateStatus = async (status: string) => {
     if (!selectedDispute) return;
-    
+
     try {
+      setActionSubmitting('status');
       await api.put(`/disputes/${selectedDispute._id}/status`, { status });
-      
+
       toast.success('Success', { description: 'Dispute status updated' });
-      
+
       fetchDisputes();
       if (selectedDispute) {
         fetchDisputeDetails(selectedDispute._id);
       }
     } catch (error: any) {
       toast.error('Error', { description: error.response?.data?.message || 'Failed to update status' });
+    } finally {
+      setActionSubmitting(null);
     }
   };
 
   const handleSendMessage = async () => {
     if (!selectedDispute || !newMessage.trim()) return;
-    
+
     try {
+      setActionSubmitting('message');
       await api.post(`/disputes/${selectedDispute._id}/messages`, {
         content: newMessage
       });
-      
+
       setNewMessage('');
       toast.success('Success', { description: 'Message sent' });
-      
+
       fetchDisputeDetails(selectedDispute._id);
     } catch (error: any) {
       toast.error('Error', { description: error.response?.data?.message || 'Failed to send message' });
+    } finally {
+      setActionSubmitting(null);
     }
   };
 
   const handleResolveDispute = async () => {
     if (!selectedDispute) return;
-    
+
     try {
+      setActionSubmitting('resolve');
       const payload = {
         ...resolutionForm,
         awardedAmount: resolutionForm.awardedAmount ? parseFloat(resolutionForm.awardedAmount) : undefined
@@ -236,6 +247,8 @@ const AdminDisputes: React.FC = () => {
       setShowDetailsDialog(false);
     } catch (error: any) {
       toast.error('Error', { description: error.response?.data?.message || 'Failed to resolve dispute' });
+    } finally {
+      setActionSubmitting(null);
     }
   };
 
@@ -534,7 +547,9 @@ const AdminDisputes: React.FC = () => {
                           onChange={(e) => setNewMessage(e.target.value)}
                           rows={2}
                         />
-                        <Button onClick={handleSendMessage}>Send</Button>
+                        <Button onClick={handleSendMessage} disabled={actionSubmitting === 'message' || !newMessage.trim()}>
+                          {actionSubmitting === 'message' ? 'Sending...' : 'Send'}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -542,13 +557,15 @@ const AdminDisputes: React.FC = () => {
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2">
                     {!selectedDispute.assignedTo && user?.isSuperAdmin && (
-                      <Button onClick={handleAssignToMe}>Assign to Me</Button>
+                      <Button onClick={handleAssignToMe} disabled={actionSubmitting === 'assign'}>
+                        {actionSubmitting === 'assign' ? 'Assigning...' : 'Assign to Me'}
+                      </Button>
                     )}
                     {selectedDispute.status !== 'resolved' && (
                       <>
-                        <Select onValueChange={handleUpdateStatus}>
+                        <Select onValueChange={handleUpdateStatus} disabled={actionSubmitting === 'status'}>
                           <SelectTrigger className="w-48">
-                            <SelectValue placeholder="Update Status" />
+                            <SelectValue placeholder={actionSubmitting === 'status' ? 'Updating...' : 'Update Status'} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="under_review">Under Review</SelectItem>
@@ -735,9 +752,9 @@ const AdminDisputes: React.FC = () => {
             </Button>
             <Button
               onClick={handleResolveDispute}
-              disabled={!resolutionForm.decision || !resolutionForm.explanation || !resolutionForm.action}
+              disabled={actionSubmitting === 'resolve' || !resolutionForm.decision || !resolutionForm.explanation || !resolutionForm.action}
             >
-              Resolve & Close Dispute
+              {actionSubmitting === 'resolve' ? 'Resolving...' : 'Resolve & Close Dispute'}
             </Button>
           </DialogFooter>
         </DialogContent>
