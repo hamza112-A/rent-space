@@ -214,6 +214,7 @@ const Subscription: React.FC = () => {
   const [loadError, setLoadError] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -251,13 +252,17 @@ const Subscription: React.FC = () => {
 
   const handleCancel = async () => {
     if (!currentSubscription || currentSubscription.plan === 'free') return;
+    if (!confirm('Cancel your subscription? You will retain access until the end of your billing period.')) return;
 
     try {
+      setCancelling(true);
       await subscriptionApi.cancel();
       toast.success('Subscription cancelled. You will retain access until the end of your billing period.');
       fetchData();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to cancel subscription');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -478,8 +483,10 @@ const Subscription: React.FC = () => {
                           onClick={handleCancel}
                           variant="ghost"
                           className="w-full text-red-500 hover:text-red-600 hover:bg-red-50"
+                          disabled={cancelling}
                         >
-                          Cancel Subscription
+                          {cancelling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                          {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
                         </Button>
                       )}
                     </CardContent>
