@@ -84,7 +84,7 @@ const AdminAnalytics: React.FC = () => {
       const [revenue, users, listings] = await Promise.all([
         adminApi.getRevenueAnalytics(parseInt(period)),
         adminApi.getUserAnalytics(parseInt(period)),
-        adminApi.getListingAnalytics(),
+        adminApi.getListingAnalytics(parseInt(period)),
       ]);
       setRevenueData(revenue.data?.data);
       setUserData(users.data?.data);

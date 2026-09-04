@@ -404,31 +404,87 @@ router.get('/audit-log', requireAdminRole(), asyncHandler(async (req, res) => {
 }));
 
 // ==================== ANALYTICS ====================
+// Response shape here is a contract with AdminAnalytics.tsx — field names
+// must match exactly what the dashboard destructures.
 router.get('/analytics/revenue', requireAdminRole('finance'), asyncHandler(async (req, res) => {
-  const { period = '30' } = req.query;
-  const startDate = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000);
+  const period = parseInt(req.query.period) || 30;
+  const startDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+  const previousStartDate = new Date(Date.now() - period * 2 * 24 * 60 * 60 * 1000);
+
   // Platform revenue, not GMV — see note on the /dashboard route above.
-  const revenue = await Payment.aggregate([
-    { $match: { status: 'completed', createdAt: { $gte: startDate } } },
-    { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, total: { $sum: { $add: ['$amount.serviceFee', { $ifNull: ['$amount.commission', 0] }] } }, count: { $sum: 1 } } },
-    { $sort: { _id: 1 } }
+  const platformRevenueExpr = { $add: ['$amount.serviceFee', { $ifNull: ['$amount.commission', 0] }] };
+
+  const [dailyRevenue, currentRevenueAgg, previousRevenueAgg, totalBookings, avgBookingValueAgg, bookingsByStatus] = await Promise.all([
+    Payment.aggregate([
+      { $match: { status: 'completed', createdAt: { $gte: startDate } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, revenue: { $sum: platformRevenueExpr }, bookings: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]),
+    Payment.aggregate([
+      { $match: { status: 'completed', createdAt: { $gte: startDate } } },
+      { $group: { _id: null, total: { $sum: platformRevenueExpr } } }
+    ]),
+    Payment.aggregate([
+      { $match: { status: 'completed', createdAt: { $gte: previousStartDate, $lt: startDate } } },
+      { $group: { _id: null, total: { $sum: platformRevenueExpr } } }
+    ]),
+    Booking.countDocuments({ createdAt: { $gte: startDate } }),
+    Booking.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      { $group: { _id: null, avg: { $avg: '$pricing.totalAmount' } } }
+    ]),
+    Booking.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
   ]);
-  const totalRevenue = revenue.reduce((sum, day) => sum + day.total, 0);
-  res.json({ success: true, data: { daily: revenue, total: totalRevenue } });
+
+  const totalRevenue = currentRevenueAgg[0]?.total || 0;
+  const previousRevenue = previousRevenueAgg[0]?.total || 0;
+  const revenueGrowth = previousRevenue === 0 ? (totalRevenue > 0 ? 100 : 0) : Math.round(((totalRevenue - previousRevenue) / previousRevenue) * 100);
+
+  res.json({
+    success: true,
+    data: {
+      totalRevenue,
+      revenueGrowth,
+      totalBookings,
+      avgBookingValue: Math.round(avgBookingValueAgg[0]?.avg || 0),
+      dailyRevenue,
+      bookingsByStatus
+    }
+  });
 }));
 
 router.get('/analytics/users', requireAdminRole('support', 'finance'), asyncHandler(async (req, res) => {
-  const { period = '30' } = req.query;
-  const startDate = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000);
-  const userGrowth = await User.aggregate([{ $match: { createdAt: { $gte: startDate } } }, { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } }, { $sort: { _id: 1 } }]);
-  const roleDistribution = await User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]);
-  res.json({ success: true, data: { growth: userGrowth, roles: roleDistribution } });
+  const period = parseInt(req.query.period) || 30;
+  const startDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+  const previousStartDate = new Date(Date.now() - period * 2 * 24 * 60 * 60 * 1000);
+
+  const [dailyRegistrations, newUsers, previousNewUsers, roleDistribution] = await Promise.all([
+    User.aggregate([
+      { $match: { createdAt: { $gte: startDate } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]),
+    User.countDocuments({ createdAt: { $gte: startDate } }),
+    User.countDocuments({ createdAt: { $gte: previousStartDate, $lt: startDate } }),
+    User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }])
+  ]);
+
+  const userGrowth = previousNewUsers === 0 ? (newUsers > 0 ? 100 : 0) : Math.round(((newUsers - previousNewUsers) / previousNewUsers) * 100);
+
+  res.json({ success: true, data: { newUsers, userGrowth, dailyRegistrations, roleDistribution } });
 }));
 
 router.get('/analytics/listings', requireAdminRole('support', 'finance'), asyncHandler(async (req, res) => {
-  const categoryDistribution = await Listing.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }, { $sort: { count: -1 } }]);
-  const statusDistribution = await Listing.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]);
-  res.json({ success: true, data: { categories: categoryDistribution, statuses: statusDistribution } });
+  const period = parseInt(req.query.period) || 30;
+  const startDate = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+
+  const [newListings, totalListings, categoryDistribution] = await Promise.all([
+    Listing.countDocuments({ createdAt: { $gte: startDate } }),
+    Listing.countDocuments({ status: 'active' }),
+    Listing.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }, { $sort: { count: -1 } }])
+  ]);
+
+  res.json({ success: true, data: { newListings, totalListings, categoryDistribution } });
 }));
 
 // ==================== CATEGORY MANAGEMENT ====================

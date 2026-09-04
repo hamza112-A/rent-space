@@ -398,7 +398,8 @@ export const adminApi = {
     api.get('/admin/analytics/revenue', { params: { period } }),
   getUserAnalytics: (period?: number) =>
     api.get('/admin/analytics/users', { params: { period } }),
-  getListingAnalytics: () => api.get('/admin/analytics/listings'),
+  getListingAnalytics: (period?: number) =>
+    api.get('/admin/analytics/listings', { params: { period } }),
   
   // Category Management
   getCategories: () => api.get('/admin/settings/categories'),
