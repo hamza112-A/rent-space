@@ -60,6 +60,7 @@ const Verification: React.FC = () => {
   const [otp, setOtp] = useState('');
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
 
   // Identity dialog
   const [identityOpen, setIdentityOpen] = useState(false);
@@ -220,13 +221,16 @@ const Verification: React.FC = () => {
   };
 
   const handleResendOtp = async () => {
-    if (!user?._id || !otpStep || resendCooldown > 0) return;
+    if (!user?._id || !otpStep || resendCooldown > 0 || resending) return;
     try {
+      setResending(true);
       await authApi.resendOTP({ userId: user._id, type: otpStep });
       setResendCooldown(60);
       toast.success('Code resent');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to resend code');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -533,10 +537,10 @@ const Verification: React.FC = () => {
               size="sm"
               className="gap-2"
               onClick={handleResendOtp}
-              disabled={resendCooldown > 0}
+              disabled={resendCooldown > 0 || resending}
             >
-              <RefreshCw className={`h-3 w-3 ${resendCooldown > 0 ? '' : ''}`} />
-              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+              <RefreshCw className={`h-3 w-3 ${resending ? 'animate-spin' : ''}`} />
+              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : resending ? 'Sending...' : 'Resend code'}
             </Button>
           </div>
           <DialogFooter>
