@@ -178,6 +178,7 @@ const MyListings: React.FC = () => {
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const [maxListings, setMaxListings] = useState<number | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
+  const [actioningId, setActioningId] = useState<string | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [bulkFile, setBulkFile] = useState<File | null>(null);
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -208,18 +209,22 @@ const MyListings: React.FC = () => {
 
   const handleDelete = async (listingId: string) => {
     if (!confirm('Are you sure you want to delete this listing?')) return;
-    
+
     try {
+      setActioningId(listingId);
       await listingApi.delete(listingId);
       setListings(listings.filter(l => l._id !== listingId));
       toast.success('Listing deleted successfully');
     } catch (err) {
       toast.error('Failed to delete listing');
+    } finally {
+      setActioningId(null);
     }
   };
 
   const handleStatusChange = async (listingId: string, newStatus: string) => {
     try {
+      setActioningId(listingId);
       await listingApi.update(listingId, { status: newStatus } as any);
       setListings(listings.map(l =>
         l._id === listingId ? { ...l, status: newStatus } : l
@@ -227,6 +232,8 @@ const MyListings: React.FC = () => {
       toast.success(`Listing ${newStatus === 'active' ? 'activated' : 'paused'} successfully`);
     } catch (err) {
       toast.error('Failed to update listing status');
+    } finally {
+      setActioningId(null);
     }
   };
 
@@ -557,8 +564,12 @@ const MyListings: React.FC = () => {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={actioningId === listing._id}>
+                          {actioningId === listing._id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <MoreVertical className="h-4 w-4" />
+                          )}
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -582,7 +593,7 @@ const MyListings: React.FC = () => {
                             <Play className="h-4 w-4 mr-2" /> {t.listing.available}
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-destructive"
                           onClick={() => handleDelete(listing._id)}
                         >
