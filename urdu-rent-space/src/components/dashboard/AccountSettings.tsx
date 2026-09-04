@@ -92,6 +92,7 @@ const AccountSettings: React.FC = () => {
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [addingPayment, setAddingPayment] = useState(false);
+  const [paymentActionId, setPaymentActionId] = useState<string | null>(null);
   const [newPaymentMethod, setNewPaymentMethod] = useState({
     type: 'jazzcash',
     mobileNumber: '',
@@ -415,21 +416,27 @@ const AccountSettings: React.FC = () => {
 
   const handleDeletePaymentMethod = async (methodId: string) => {
     try {
+      setPaymentActionId(methodId);
       await paymentApi.deleteMethod(methodId);
       toast.success('Payment method removed');
       fetchPaymentMethods();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to remove payment method');
+    } finally {
+      setPaymentActionId(null);
     }
   };
 
   const handleSetDefaultPaymentMethod = async (methodId: string) => {
     try {
+      setPaymentActionId(methodId);
       await paymentApi.setDefaultMethod(methodId);
       toast.success('Default payment method updated');
       fetchPaymentMethods();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to update default method');
+    } finally {
+      setPaymentActionId(null);
     }
   };
 
@@ -919,8 +926,9 @@ const AccountSettings: React.FC = () => {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleSetDefaultPaymentMethod(method._id)}
+                        disabled={paymentActionId === method._id}
                       >
-                        Set Default
+                        {paymentActionId === method._id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Set Default'}
                       </Button>
                     )}
                     <Button
@@ -928,8 +936,13 @@ const AccountSettings: React.FC = () => {
                       size="icon"
                       className="text-destructive hover:text-destructive"
                       onClick={() => handleDeletePaymentMethod(method._id)}
+                      disabled={paymentActionId === method._id}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {paymentActionId === method._id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
