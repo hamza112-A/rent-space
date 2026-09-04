@@ -113,6 +113,7 @@ const Earnings: React.FC = () => {
   const [manageOpen, setManageOpen] = useState(false);
   const [addingMethod, setAddingMethod] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [deletingMethodId, setDeletingMethodId] = useState<string | null>(null);
   const [newMethodType, setNewMethodType] = useState<'bank_transfer' | 'jazzcash' | 'easypaisa'>('jazzcash');
   const [newMethodDetails, setNewMethodDetails] = useState({
     mobileNumber: '',
@@ -268,11 +269,14 @@ const Earnings: React.FC = () => {
 
   const handleDeleteMethod = async (id: string) => {
     try {
+      setDeletingMethodId(id);
       await earningsApi.deletePayoutMethod(id);
       setPayoutMethods((prev) => prev.filter((m) => m._id !== id));
       toast.success('Payout method removed');
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to remove payout method');
+    } finally {
+      setDeletingMethodId(null);
     }
   };
 
@@ -628,8 +632,12 @@ const Earnings: React.FC = () => {
                     {m.details.mobileNumber || m.details.accountNumber || m.details.accountTitle}
                   </p>
                 </div>
-                <Button size="icon" variant="ghost" onClick={() => handleDeleteMethod(m._id)}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                <Button size="icon" variant="ghost" onClick={() => handleDeleteMethod(m._id)} disabled={deletingMethodId === m._id}>
+                  {deletingMethodId === m._id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  )}
                 </Button>
               </div>
             ))}
