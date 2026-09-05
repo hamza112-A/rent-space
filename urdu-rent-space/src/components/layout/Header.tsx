@@ -52,6 +52,14 @@ const Header: React.FC = () => {
     navigate('/');
   };
 
+  // Shown to visitors (funnel to signup) and to owners — but for a 'both'
+  // user, only while they're actually in Owner mode, so it matches what the
+  // sidebar already does instead of offering listing creation while they're
+  // browsing as a buyer.
+  const showCreateListing = !isAuthenticated
+    || user?.role === 'owner'
+    || (user?.role === 'both' && user.activeMode !== 'borrower');
+
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${styles.headerClassName}`}>
       <div className="container mx-auto px-4">
@@ -192,8 +200,8 @@ const Header: React.FC = () => {
               </>
             )}
 
-            {/* Create Listing - Only for owners */}
-            {(!isAuthenticated || user?.role === 'owner' || user?.role === 'both') && (
+            {/* Create Listing - Only for owners (and 'both' users in Owner mode) */}
+            {showCreateListing && (
               <Link to="/create-listing">
                 <Button variant="secondary" size="sm" className="gap-2">
                   <Plus className="w-4 h-4" />
@@ -295,8 +303,8 @@ const Header: React.FC = () => {
                   </div>
                 )}
 
-                {/* Create Listing - Only for owners */}
-                {(!isAuthenticated || user?.role === 'owner' || user?.role === 'both') && (
+                {/* Create Listing - Only for owners (and 'both' users in Owner mode) */}
+                {showCreateListing && (
                   <Link to="/create-listing" onClick={() => setIsMenuOpen(false)}>
                     <Button variant="secondary" className="w-full gap-2">
                       <Plus className="w-4 h-4" />
