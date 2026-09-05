@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { LayoutDashboard, Calendar, Shield, Settings, Crown, MessageSquare, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Calendar, Shield, Settings, Crown, MessageSquare, AlertTriangle, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DashboardShell, { type DashboardTab } from '@/components/dashboard/DashboardShell';
 import MyBookings from '@/components/dashboard/MyBookings';
@@ -33,12 +33,20 @@ const BuyerDashboard: React.FC = () => {
       activeTab={activeTab}
       onTabChange={setActiveTab}
       sidebarExtra={
-        <Link to="/subscription">
-          <Button variant="outline" className="w-full gap-2 justify-start text-amber-600 border-amber-200 hover:bg-amber-50">
-            <Crown className="h-4 w-4" />
-            {t.subscription.subscribe}
-          </Button>
-        </Link>
+        <>
+          <Link to="/listings">
+            <Button variant="outline" className="w-full gap-2 justify-start">
+              <Search className="h-4 w-4" />
+              {t.nav.listings}
+            </Button>
+          </Link>
+          <Link to="/subscription">
+            <Button variant="outline" className="w-full gap-2 justify-start text-amber-600 border-amber-200 hover:bg-amber-50">
+              <Crown className="h-4 w-4" />
+              {t.subscription.subscribe}
+            </Button>
+          </Link>
+        </>
       }
     />
   );
