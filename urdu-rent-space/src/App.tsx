@@ -12,7 +12,9 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import CategoryPage from "./pages/CategoryPage";
 import Categories from "./pages/Categories";
-import Dashboard from "./pages/Dashboard";
+import DashboardRedirect from "./pages/DashboardRedirect";
+import OwnerDashboard from "./pages/OwnerDashboard";
+import BuyerDashboard from "./pages/BuyerDashboard";
 import ListingDetail from "./pages/ListingDetail";
 import CreateListing from "./pages/CreateListing";
 import VerifyOTP from "./pages/VerifyOTP";
@@ -50,7 +52,9 @@ const App = () => (
               <Route path="/payment/success" element={<PaymentSuccess />} />
               <Route path="/payment/failed" element={<PaymentFailed />} />
               <Route path="/subscription" element={<ProtectedRoute><Subscription /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
+              <Route path="/dashboard/owner" element={<ProtectedRoute><OwnerDashboard /></ProtectedRoute>} />
+              <Route path="/dashboard/buyer" element={<ProtectedRoute><BuyerDashboard /></ProtectedRoute>} />
               <Route path="/user/:userId" element={<UserProfile />} />
               <Route path="/store/:slug" element={<Storefront />} />
               <Route path="*" element={<NotFound />} />

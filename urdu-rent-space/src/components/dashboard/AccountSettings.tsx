@@ -46,18 +46,24 @@ import {
   Star,
   Crown,
   Loader2,
+  Building2,
+  ShoppingBag,
 } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { userApi, authApi, paymentApi, subscriptionApi } from '@/lib/api';
 import { toast } from 'sonner';
 import EmptyState from '@/components/common/EmptyState';
+import RoleOnboardingModal from '@/components/dashboard/RoleOnboardingModal';
 
 const AccountSettings: React.FC = () => {
   const { t, language, setLanguage } = useLanguage();
-  const { user, updateUser, logout, checkAuth } = useAuth();
+  const { user, updateUser, logout, checkAuth, addRole, setActiveMode } = useAuth();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const [addingRole, setAddingRole] = useState<'owner' | 'borrower' | null>(null);
+  const [onboardingRole, setOnboardingRole] = useState<'owner' | 'borrower' | null>(null);
+  const [switchingMode, setSwitchingMode] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profileImage, setProfileImage] = useState<string | null>(null);
@@ -279,6 +285,33 @@ const AccountSettings: React.FC = () => {
       toast.error('Failed to update profile');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddRole = async (role: 'owner' | 'borrower') => {
+    try {
+      setAddingRole(role);
+      const { addedCapability } = await addRole(role);
+      if (addedCapability) {
+        toast.success(role === 'owner' ? 'You can now list items as an Owner' : 'You can now book items as a Buyer');
+        setOnboardingRole(role);
+      }
+    } catch (err) {
+      toast.error('Failed to update your account type');
+    } finally {
+      setAddingRole(null);
+    }
+  };
+
+  const handleSwitchDefaultMode = async (mode: 'owner' | 'borrower') => {
+    try {
+      setSwitchingMode(true);
+      await setActiveMode(mode);
+      toast.success('Default dashboard updated');
+    } catch (err) {
+      toast.error('Failed to update default dashboard');
+    } finally {
+      setSwitchingMode(false);
     }
   };
 
@@ -697,6 +730,81 @@ const AccountSettings: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Account Type — owner/buyer capabilities and mode switching */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            Account Type
+          </CardTitle>
+          <CardDescription>Owner and Buyer are separate capabilities on your account — add either one anytime</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 flex items-center justify-between gap-3 p-4 rounded-lg border border-border">
+              <div className="flex items-center gap-3">
+                <Building2 className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium text-foreground">Owner</p>
+                  <p className="text-xs text-muted-foreground">List items for rent</p>
+                </div>
+              </div>
+              {user?.role === 'owner' || user?.role === 'both' ? (
+                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>
+              ) : (
+                <Button size="sm" variant="outline" disabled={addingRole === 'owner'} onClick={() => handleAddRole('owner')}>
+                  {addingRole === 'owner' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                </Button>
+              )}
+            </div>
+
+            <div className="flex-1 flex items-center justify-between gap-3 p-4 rounded-lg border border-border">
+              <div className="flex items-center gap-3">
+                <ShoppingBag className="h-5 w-5 text-secondary" />
+                <div>
+                  <p className="font-medium text-foreground">Buyer</p>
+                  <p className="text-xs text-muted-foreground">Book items from other owners</p>
+                </div>
+              </div>
+              {user?.role === 'borrower' || user?.role === 'both' ? (
+                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>
+              ) : (
+                <Button size="sm" variant="outline" disabled={addingRole === 'borrower'} onClick={() => handleAddRole('borrower')}>
+                  {addingRole === 'borrower' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {user?.role === 'both' && (
+            <div>
+              <Label>Default dashboard on login</Label>
+              <Select
+                value={user.activeMode === 'borrower' ? 'borrower' : 'owner'}
+                onValueChange={(value) => handleSwitchDefaultMode(value as 'owner' | 'borrower')}
+                disabled={switchingMode}
+              >
+                <SelectTrigger className="mt-1.5 w-full sm:w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="owner">Owner dashboard</SelectItem>
+                  <SelectItem value="borrower">Buyer dashboard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {onboardingRole && (
+        <RoleOnboardingModal
+          open={!!onboardingRole}
+          role={onboardingRole}
+          onClose={() => setOnboardingRole(null)}
+        />
+      )}
 
       {/* Notifications */}
       <Card>

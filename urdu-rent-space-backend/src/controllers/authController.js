@@ -200,6 +200,9 @@ const login = asyncHandler(async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        activeMode: user.activeMode,
+        ownerProfile: user.ownerProfile,
+        buyerProfile: user.buyerProfile,
         avatar: user.avatar,
         profileImage: user.avatar?.url,
         isEmailVerified: user.verification?.email?.verified || false,
@@ -410,7 +413,19 @@ const resendOTP = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Select/update the current user's role
+// Which single-role capabilities each `role` enum value grants.
+const ROLE_CAPABILITIES = {
+  owner: ['owner'],
+  borrower: ['borrower'],
+  both: ['owner', 'borrower']
+};
+
+// @desc    Add a role capability (owner and/or borrower) to the current
+//          user's account. Additive/idempotent — never removes a capability
+//          the user already has, so e.g. a 'borrower' requesting 'owner'
+//          becomes 'both', and requesting a capability already held is a
+//          no-op. This is how a user "becomes an owner" (or buyer) after
+//          registering with only the other role.
 // @route   POST /api/v1/auth/select-role
 // @access  Private
 const selectRole = asyncHandler(async (req, res, next) => {
@@ -420,7 +435,7 @@ const selectRole = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Role is required', 400));
   }
 
-  if (!['owner', 'borrower', 'both'].includes(role)) {
+  if (!ROLE_CAPABILITIES[role]) {
     return next(new ErrorResponse('Invalid role selected', 400));
   }
 
@@ -430,14 +445,27 @@ const selectRole = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('User not found', 404));
   }
 
-  user.role = role;
+  const previousRole = user.role;
+  const capabilities = new Set([...ROLE_CAPABILITIES[previousRole], ...ROLE_CAPABILITIES[role]]);
+  const nextRole = capabilities.size === 2 ? 'both' : [...capabilities][0];
+  const addedCapability = capabilities.size > ROLE_CAPABILITIES[previousRole].length;
+
+  user.role = nextRole;
+
+  // Land the user in the dashboard for the capability they just added.
+  if (addedCapability) {
+    user.activeMode = ROLE_CAPABILITIES[role].find((r) => !ROLE_CAPABILITIES[previousRole].includes(r));
+  }
+
   await user.save();
 
   res.status(200).json({
     success: true,
     data: {
-      message: 'Role updated successfully',
-      role: role
+      message: addedCapability ? 'Role added successfully' : 'Role unchanged',
+      role: user.role,
+      activeMode: user.activeMode,
+      addedCapability
     }
   });
 });
@@ -658,6 +686,9 @@ const getMe = asyncHandler(async (req, res, next) => {
     email: user.email,
     phone: user.phone,
     role: user.role,
+    activeMode: user.activeMode,
+    ownerProfile: user.ownerProfile,
+    buyerProfile: user.buyerProfile,
     avatar: user.avatar,
     profileImage: user.avatar?.url,
     bio: user.bio,

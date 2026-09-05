@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { authApi, userApi } from '@/lib/api';
 
 interface User {
   _id: string;
@@ -6,6 +7,11 @@ interface User {
   email: string;
   phone?: string;
   role: string;
+  // Which dashboard a 'both' user is currently viewing — irrelevant for
+  // single-role users, whose mode is implied by `role`.
+  activeMode?: 'owner' | 'borrower';
+  ownerProfile?: { onboardingCompletedAt?: string };
+  buyerProfile?: { onboardingCompletedAt?: string };
   isEmailVerified: boolean;
   isPhoneVerified: boolean;
   profileImage?: string;
@@ -25,6 +31,11 @@ interface AuthContextType {
   resendOTP: (userId: string, type: 'email' | 'phone') => Promise<void>;
   updateUser: (user: User) => void;
   checkAuth: () => Promise<void>;
+  // Adds a role capability (owner and/or borrower) to the account —
+  // additive, never removes a capability the user already has.
+  addRole: (role: 'owner' | 'borrower') => Promise<{ addedCapability: boolean; role: string }>;
+  // Switches which dashboard a 'both' user is currently viewing.
+  setActiveMode: (mode: 'owner' | 'borrower') => Promise<void>;
 }
 
 interface RegisterData {
@@ -186,6 +197,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(updatedUser);
   };
 
+  const addRole = async (role: 'owner' | 'borrower') => {
+    const response = await authApi.selectRole({ role });
+    const { role: nextRole, activeMode, addedCapability } = response.data.data;
+    setUser((prev) => (prev ? { ...prev, role: nextRole, activeMode } : prev));
+    return { addedCapability, role: nextRole };
+  };
+
+  const setActiveMode = async (mode: 'owner' | 'borrower') => {
+    await userApi.updateProfile({ activeMode: mode });
+    setUser((prev) => (prev ? { ...prev, activeMode: mode } : prev));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -198,7 +221,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         verifyOTP,
         resendOTP,
         updateUser,
-        checkAuth
+        checkAuth,
+        addRole,
+        setActiveMode
       }}
     >
       {children}

@@ -21,7 +21,28 @@ const getProfile = asyncHandler(async (req, res, next) => {
 // @route   PATCH /api/v1/users/profile
 // @access  Private
 const updateProfile = asyncHandler(async (req, res, next) => {
-  const { fullName, bio, phone, location, preferences } = req.body;
+  const { fullName, bio, phone, location, preferences, activeMode, completeRoleOnboarding } = req.body;
+
+  // Which dashboard ('owner'/'borrower') a 'both' user wants to see by
+  // default — a single-role user can't switch away from their only role.
+  if (activeMode !== undefined) {
+    if (!['owner', 'borrower'].includes(activeMode)) {
+      return next(new ErrorResponse('Invalid active mode', 400));
+    }
+
+    const currentUser = await User.findById(req.user.id).select('role');
+    const allowedModes = currentUser.role === 'both' ? ['owner', 'borrower'] : [currentUser.role];
+
+    if (!allowedModes.includes(activeMode)) {
+      return next(new ErrorResponse('You do not have that role on your account', 403));
+    }
+  }
+
+  // Marks the one-time role-onboarding modal as seen for that role, so it
+  // doesn't reappear on the next login.
+  if (completeRoleOnboarding !== undefined && !['owner', 'borrower'].includes(completeRoleOnboarding)) {
+    return next(new ErrorResponse('Invalid role', 400));
+  }
 
   // Validate input
   const validation = validateInput({
@@ -79,6 +100,9 @@ const updateProfile = asyncHandler(async (req, res, next) => {
     ...(phone && { phone }),
     ...(location && { location }),
     ...(preferences && { preferences }),
+    ...(activeMode !== undefined && { activeMode }),
+    ...(completeRoleOnboarding === 'owner' && { 'ownerProfile.onboardingCompletedAt': new Date() }),
+    ...(completeRoleOnboarding === 'borrower' && { 'buyerProfile.onboardingCompletedAt': new Date() }),
     ...(avatarData && { avatar: avatarData }),
     updatedAt: new Date()
   };
@@ -321,8 +345,14 @@ const getDashboardOverview = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/users/:id
 // @access  Public
 const getPublicProfile = asyncHandler(async (req, res, next) => {
+  const { role } = req.query;
+
+  if (role !== undefined && !['owner', 'borrower'].includes(role)) {
+    return next(new ErrorResponse('Invalid role', 400));
+  }
+
   const user = await User.findById(req.params.id)
-    .select('fullName avatar bio rating responseRate responseTime stats createdAt verification.email.verified verification.phone.verified verification.identity.verified');
+    .select('fullName avatar bio rating responseRate responseTime stats ownerProfile buyerProfile createdAt verification.email.verified verification.phone.verified verification.identity.verified');
 
   if (!user) {
     return next(new ErrorResponse('User not found', 404));
@@ -334,9 +364,19 @@ const getPublicProfile = asyncHandler(async (req, res, next) => {
     await user.save({ validateBeforeSave: false });
   }
 
+  const data = user.toObject();
+  // ?role=owner|borrower scopes rating/stats to that profile instead of the
+  // legacy combined fields — used by pages showing a user's standing in one
+  // specific role (e.g. as the owner of the listing being viewed).
+  if (role) {
+    const profile = role === 'owner' ? data.ownerProfile : data.buyerProfile;
+    data.rating = profile.rating;
+    data.stats = { ...data.stats, ...profile.stats };
+  }
+
   res.status(200).json({
     success: true,
-    data: user
+    data
   });
 });
 
@@ -485,7 +525,11 @@ const verifyBiometric = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/users/:id/reviews
 // @access  Public
 const getReviews = asyncHandler(async (req, res, next) => {
-  const { page = 1, limit = 10, sortBy = 'recent' } = req.query;
+  const { page = 1, limit = 10, sortBy = 'recent', role } = req.query;
+
+  if (role !== undefined && !['owner', 'borrower'].includes(role)) {
+    return next(new ErrorResponse('Invalid role', 400));
+  }
 
   const Review = require('../models/Review');
 
@@ -493,14 +537,19 @@ const getReviews = asyncHandler(async (req, res, next) => {
   if (sortBy === 'highest') sortOptions = { rating: -1, createdAt: -1 };
   if (sortBy === 'lowest') sortOptions = { rating: 1, createdAt: -1 };
 
-  const reviews = await Review.find({ revieweeId: req.params.id })
+  // ?role=owner|borrower scopes to reviews received in that role only, so a
+  // 'both' user's public profile can show owner reviews and buyer reviews
+  // separately instead of one blended list.
+  const query = { revieweeId: req.params.id, ...(role && { revieweeRole: role }) };
+
+  const reviews = await Review.find(query)
     .populate('reviewerId', 'fullName avatar')
     .populate('listingId', 'title')
     .sort(sortOptions)
     .limit(limit * 1)
     .skip((page - 1) * limit);
 
-  const total = await Review.countDocuments({ revieweeId: req.params.id });
+  const total = await Review.countDocuments(query);
 
   res.status(200).json({
     success: true,
@@ -562,11 +611,15 @@ const addReview = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Review already exists for this booking', 400));
   }
 
-  // Create review
+  // Create review — revieweeRole records which hat the reviewee was
+  // wearing in this booking, so ownerProfile/buyerProfile ratings (updated
+  // by Review's post-save hook) stay independent.
+  const revieweeRole = booking.owner.toString() === req.params.id ? 'owner' : 'borrower';
   const review = await Review.create({
     bookingId,
     reviewerId: req.user.id,
     revieweeId: req.params.id,
+    revieweeRole,
     listingId: booking.listing,
     rating,
     comment

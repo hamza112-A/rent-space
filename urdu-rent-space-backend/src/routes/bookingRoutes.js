@@ -310,9 +310,11 @@ router.post('/:id/review', protect, asyncHandler(async (req, res) => {
     });
   }
 
-  // Determine who is reviewing whom
+  // Determine who is reviewing whom, and which hat the reviewee was wearing
+  // in this booking (so ownerProfile/buyerProfile ratings stay independent)
   const reviewerId = req.user._id;
   const revieweeId = isRenter ? booking.owner._id : booking.renter._id;
+  const revieweeRole = isRenter ? 'owner' : 'borrower';
 
   // Check if user has already reviewed this booking
   const existingReview = await Review.findOne({
@@ -334,6 +336,7 @@ router.post('/:id/review', protect, asyncHandler(async (req, res) => {
     listingId: booking.listing._id,
     reviewerId: reviewerId,
     revieweeId: revieweeId,
+    revieweeRole,
     rating,
     comment: comment.trim()
   });

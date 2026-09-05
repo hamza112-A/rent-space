@@ -19,6 +19,14 @@ const reviewSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'Reviewee ID is required']
   },
+  // Which hat the reviewee was wearing in this booking — lets ratings be
+  // tracked separately per role (see User.ownerProfile/buyerProfile)
+  // instead of blending an owner's and a buyer's reputations together.
+  revieweeRole: {
+    type: String,
+    enum: ['owner', 'borrower'],
+    required: [true, 'Reviewee role is required']
+  },
 
   // Listing Reference (optional, for listing-specific reviews)
   listingId: {
@@ -195,10 +203,15 @@ reviewSchema.methods.flagReview = function(reason) {
   return this.save();
 };
 
-// Static method to get review statistics for a user
-reviewSchema.statics.getReviewStats = function(userId) {
+// Static method to get review statistics for a user. Pass `role` ('owner' or
+// 'borrower') to scope to reviews received in that role only — used to keep
+// ownerProfile.rating and buyerProfile.rating independent; omit it for the
+// legacy combined `rating` field.
+reviewSchema.statics.getReviewStats = function(userId, role) {
+  const match = { revieweeId: mongoose.Types.ObjectId(userId), status: 'active' };
+  if (role) match.revieweeRole = role;
   return this.aggregate([
-    { $match: { revieweeId: mongoose.Types.ObjectId(userId), status: 'active' } },
+    { $match: match },
     {
       $group: {
         _id: null,
@@ -262,15 +275,28 @@ reviewSchema.pre('save', function(next) {
 // Post-save middleware to update user and listing ratings
 reviewSchema.post('save', async function() {
   try {
-    // Update reviewee's rating
+    // Update reviewee's combined (legacy) rating
     const User = require('./User');
     const userStats = await this.constructor.getReviewStats(this.revieweeId);
-    
+
     if (userStats.length > 0) {
       await User.findByIdAndUpdate(this.revieweeId, {
         'rating.average': userStats[0].averageRating || 0,
         'rating.count': userStats[0].totalReviews || 0
       });
+    }
+
+    // Update the role-specific profile rating (owner vs buyer reputation)
+    if (this.revieweeRole) {
+      const roleStats = await this.constructor.getReviewStats(this.revieweeId, this.revieweeRole);
+      const profileField = this.revieweeRole === 'owner' ? 'ownerProfile' : 'buyerProfile';
+
+      if (roleStats.length > 0) {
+        await User.findByIdAndUpdate(this.revieweeId, {
+          [`${profileField}.rating.average`]: roleStats[0].averageRating || 0,
+          [`${profileField}.rating.count`]: roleStats[0].totalReviews || 0
+        });
+      }
     }
 
     // Update listing rating if applicable

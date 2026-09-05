@@ -252,7 +252,7 @@ const Register: React.FC = () => {
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
                                     <ShoppingBag className="w-5 h-5 text-secondary" />
-                                    <span className="font-semibold">Borrower</span>
+                                    <span className="font-semibold">Buyer</span>
                                   </div>
                                   <p className="text-sm text-muted-foreground">{t.auth.borrower}</p>
                                 </div>

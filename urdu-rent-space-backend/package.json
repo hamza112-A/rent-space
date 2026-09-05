@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "test": "jest",
     "seed": "node src/scripts/seedDatabase.js",
+    "migrate:role-profiles": "node src/scripts/migrateRoleProfiles.js",
     "build": "echo 'No build step required for Node.js'",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"

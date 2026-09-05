@@ -80,10 +80,11 @@ const DEFAULT_VALUES: ListingFormValues = {
 
 const CreateListing: React.FC = () => {
   const { t } = useLanguage();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const { listingId } = useParams<{ listingId: string }>();
   const isEditMode = !!listingId;
+  const isOwner = user?.role === 'owner' || user?.role === 'both';
 
   const [step, setStep] = useState(1);
   const [isLoadingListing, setIsLoadingListing] = useState(isEditMode);
@@ -299,6 +300,33 @@ const CreateListing: React.FC = () => {
     toast.error('Please check the form for missing or invalid fields.');
     setStep(1);
   };
+
+  // A buyer-only account can't list items — the server would 403 on submit
+  // anyway, so surface that upfront instead of letting them fill out the
+  // whole form first.
+  if (isAuthenticated && !isOwner) {
+    return (
+      <Layout>
+        <div className="pt-20 min-h-screen bg-background flex items-center justify-center px-4">
+          <Card className="max-w-md w-full">
+            <CardContent className="p-8 text-center space-y-4">
+              <Building2 className="h-10 w-10 text-primary mx-auto" />
+              <h1 className="text-xl font-bold text-foreground">Become an Owner to list items</h1>
+              <p className="text-muted-foreground text-sm">
+                Your account is currently set up as a Buyer only. Add the Owner capability from Settings to start listing items for rent.
+              </p>
+              <Button className="w-full" onClick={() => navigate('/dashboard/buyer?tab=settings')}>
+                Go to Settings
+              </Button>
+              <Link to="/dashboard" className="block text-sm text-muted-foreground hover:text-foreground">
+                Back to Dashboard
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

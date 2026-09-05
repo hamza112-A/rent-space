@@ -81,10 +81,13 @@ interface DashboardOverviewData {
 }
 
 interface DashboardOverviewProps {
+  // Which dashboard this overview renders inside — a 'both' user's overview
+  // data includes both blocks, but each dashboard only shows its own half.
+  perspective: 'owner' | 'buyer';
   onNavigateTab?: (tab: string) => void;
 }
 
-const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigateTab }) => {
+const DashboardOverview: React.FC<DashboardOverviewProps> = ({ perspective, onNavigateTab }) => {
   const { user } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -158,8 +161,8 @@ const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigateTab }) 
     );
   }
 
-  const owner = data.owner;
-  const borrower = data.borrower;
+  const owner = perspective === 'owner' ? data.owner : undefined;
+  const borrower = perspective === 'buyer' ? data.borrower : undefined;
 
   const actionItems = owner
     ? [

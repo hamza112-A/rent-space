@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -117,12 +116,16 @@ const STATUS_FILTERS = [
 ];
 
 interface MyBookingsProps {
+  // Which side of the booking this view shows: 'owner' = bookings received
+  // on the user's listings, 'buyer' = bookings the user made on others'
+  // listings. Each dashboard passes its own perspective — a pure buyer never
+  // sees an (always-empty) owner tab and vice versa.
+  perspective: 'owner' | 'buyer';
   onNavigateTab?: (tab: string) => void;
 }
 
-const MyBookings: React.FC<MyBookingsProps> = ({ onNavigateTab }) => {
+const MyBookings: React.FC<MyBookingsProps> = ({ perspective, onNavigateTab }) => {
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState('incoming');
   const [incomingBookings, setIncomingBookings] = useState<Booking[]>([]);
   const [outgoingBookings, setOutgoingBookings] = useState<Booking[]>([]);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -146,20 +149,21 @@ const MyBookings: React.FC<MyBookingsProps> = ({ onNavigateTab }) => {
 
   useEffect(() => {
     fetchBookings();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [perspective]);
 
   const fetchBookings = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [incomingRes, outgoingRes] = await Promise.all([
-        bookingApi.getMyBookings({ type: 'owner' }).catch(() => ({ data: { data: [] } })),
-        bookingApi.getMyBookings({ type: 'renter' }).catch(() => ({ data: { data: [] } }))
-      ]);
-
-      setIncomingBookings(incomingRes.data?.data || []);
-      setOutgoingBookings(outgoingRes.data?.data || []);
+      if (perspective === 'owner') {
+        const incomingRes = await bookingApi.getMyBookings({ type: 'owner' }).catch(() => ({ data: { data: [] } }));
+        setIncomingBookings(incomingRes.data?.data || []);
+      } else {
+        const outgoingRes = await bookingApi.getMyBookings({ type: 'renter' }).catch(() => ({ data: { data: [] } }));
+        setOutgoingBookings(outgoingRes.data?.data || []);
+      }
     } catch (err) {
       console.error('Failed to fetch bookings:', err);
       setError('Failed to load bookings');
@@ -416,23 +420,20 @@ const MyBookings: React.FC<MyBookingsProps> = ({ onNavigateTab }) => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">{t.dashboard.myBookings}</h1>
-        <p className="text-muted-foreground">{t.booking.receivedBookings}</p>
+        <p className="text-muted-foreground">
+          {perspective === 'owner' ? t.booking.receivedBookings : 'Your bookings as a buyer'}
+        </p>
       </div>
 
       <div className="flex flex-col sm:flex-row justify-between gap-3">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
-          <TabsList className="grid w-full sm:w-auto sm:inline-grid grid-cols-2 sm:grid-cols-none sm:flex">
-            <TabsTrigger value="incoming" className="gap-2">
-              <span>As Owner</span>
-              {pendingCount > 0 && (
-                <Badge variant="secondary" className="h-5 px-1.5">
-                  {pendingCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="outgoing">As Borrower</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {perspective === 'owner' && pendingCount > 0 && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Badge variant="secondary" className="h-5 px-1.5">
+              {pendingCount}
+            </Badge>
+            <span>awaiting your decision</span>
+          </div>
+        )}
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full sm:w-44">
@@ -446,8 +447,8 @@ const MyBookings: React.FC<MyBookingsProps> = ({ onNavigateTab }) => {
         </Select>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsContent value="incoming" className="mt-0 space-y-4">
+      {perspective === 'owner' ? (
+        <div className="space-y-4">
           {filteredIncoming.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
@@ -570,9 +571,9 @@ const MyBookings: React.FC<MyBookingsProps> = ({ onNavigateTab }) => {
               </Card>
             ))
           )}
-        </TabsContent>
-
-        <TabsContent value="outgoing" className="mt-0 space-y-4">
+        </div>
+      ) : (
+        <div className="space-y-4">
           {filteredOutgoing.length === 0 ? (
             <Card>
               <CardContent className="p-12 text-center">
@@ -675,8 +676,8 @@ const MyBookings: React.FC<MyBookingsProps> = ({ onNavigateTab }) => {
               </Card>
             ))
           )}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
 
       {/* Booking Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>

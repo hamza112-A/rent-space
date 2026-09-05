@@ -57,6 +57,14 @@ const userSchema = new mongoose.Schema({
     enum: ['owner', 'borrower', 'both'],
     required: [true, 'User role is required']
   },
+  // Which dashboard a 'both' user is currently viewing — a navigation
+  // concept only, not a permission gate (ownerOnly/borrowerOnly middleware
+  // still key off `role` above so a 'both' user always keeps both
+  // capabilities regardless of which mode they're looking at).
+  activeMode: {
+    type: String,
+    enum: ['owner', 'borrower']
+  },
   accountType: {
     type: String,
     enum: ['individual', 'business'],
@@ -313,6 +321,36 @@ const userSchema = new mongoose.Schema({
   rating: {
     average: { type: Number, default: 0, min: 0, max: 5 },
     count: { type: Number, default: 0 }
+  },
+
+  // Per-role reputation/stats — split out from the flat `stats`/`rating`
+  // above so a 'both' user's standing as an owner and as a buyer are tracked
+  // independently instead of blending into one number. The flat fields are
+  // kept in sync as a union for any code not yet migrated to read these.
+  ownerProfile: {
+    rating: {
+      average: { type: Number, default: 0, min: 0, max: 5 },
+      count: { type: Number, default: 0 }
+    },
+    stats: {
+      totalListings: { type: Number, default: 0 },
+      activeListings: { type: Number, default: 0 },
+      completedBookings: { type: Number, default: 0 },
+      totalEarnings: { type: Number, default: 0 }
+    },
+    onboardingCompletedAt: Date
+  },
+  buyerProfile: {
+    rating: {
+      average: { type: Number, default: 0, min: 0, max: 5 },
+      count: { type: Number, default: 0 }
+    },
+    stats: {
+      totalBookings: { type: Number, default: 0 },
+      completedBookings: { type: Number, default: 0 },
+      totalSpent: { type: Number, default: 0 }
+    },
+    onboardingCompletedAt: Date
   },
   responseRate: { type: Number, default: 0, min: 0, max: 100 },
   responseTime: {

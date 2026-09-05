@@ -25,6 +25,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import SiteSearch from '@/components/search/SiteSearch';
+import AccountModeSwitcher from '@/components/layout/AccountModeSwitcher';
 import {
   Menu,
   Search,
@@ -143,6 +144,9 @@ const Header: React.FC = () => {
               </Link>
             )}
 
+            {/* Owner/Buyer mode switcher — only rendered for accounts with both roles */}
+            {isAuthenticated && <AccountModeSwitcher />}
+
             {/* Auth Buttons */}
             {isAuthenticated ? (
               <DropdownMenu>
@@ -241,6 +245,8 @@ const Header: React.FC = () => {
                     </Link>
                   )}
                 </div>
+
+                {isAuthenticated && <AccountModeSwitcher className="w-full" />}
 
                 {/* Language Switcher */}
                 <div className="flex gap-2">
