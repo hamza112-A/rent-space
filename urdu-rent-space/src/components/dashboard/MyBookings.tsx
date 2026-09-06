@@ -421,7 +421,7 @@ const MyBookings: React.FC<MyBookingsProps> = ({ perspective, onNavigateTab }) =
       <div>
         <h1 className="text-2xl font-bold text-foreground">{t.dashboard.myBookings}</h1>
         <p className="text-muted-foreground">
-          {perspective === 'owner' ? t.booking.receivedBookings : 'Your bookings as a buyer'}
+          {perspective === 'owner' ? t.booking.receivedBookings : t.dashboard.bookingsAsBuyer}
         </p>
       </div>
 
@@ -431,7 +431,7 @@ const MyBookings: React.FC<MyBookingsProps> = ({ perspective, onNavigateTab }) =
             <Badge variant="secondary" className="h-5 px-1.5">
               {pendingCount}
             </Badge>
-            <span>awaiting your decision</span>
+            <span>{t.dashboard.awaitingDecision}</span>
           </div>
         )}
 

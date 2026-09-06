@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Building2, ShoppingBag, Wallet, ShieldCheck, Bell } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { userApi } from '@/lib/api';
 
 interface RoleOnboardingModalProps {
@@ -24,6 +25,7 @@ interface RoleOnboardingModalProps {
 // instead of dropping them in silently.
 const RoleOnboardingModal: React.FC<RoleOnboardingModalProps> = ({ open, role, onClose }) => {
   const { updateUser, user } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
 
@@ -51,12 +53,10 @@ const RoleOnboardingModal: React.FC<RoleOnboardingModalProps> = ({ open, role, o
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {role === 'owner' ? <Building2 className="h-5 w-5 text-primary" /> : <ShoppingBag className="h-5 w-5 text-secondary" />}
-            {role === 'owner' ? "You're now an Owner" : "You're now a Buyer"}
+            {role === 'owner' ? t.dashboard.onboardingOwnerTitle : t.dashboard.onboardingBuyerTitle}
           </DialogTitle>
           <DialogDescription>
-            {role === 'owner'
-              ? "You can list items for rent. A couple of things to set up before your first listing:"
-              : 'You can now book items from other owners. A couple of quick tips:'}
+            {role === 'owner' ? t.dashboard.onboardingOwnerDesc : t.dashboard.onboardingBuyerDesc}
           </DialogDescription>
         </DialogHeader>
 
@@ -65,18 +65,18 @@ const RoleOnboardingModal: React.FC<RoleOnboardingModalProps> = ({ open, role, o
             <>
               <div className="flex items-start gap-3 text-sm">
                 <Wallet className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                <span>Add a payout method in Settings so you can get paid for completed bookings.</span>
+                <span>{t.dashboard.onboardingOwnerTip1}</span>
               </div>
               <div className="flex items-start gap-3 text-sm">
                 <ShieldCheck className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                <span>Verified owners get more bookings — finish identity verification when you can.</span>
+                <span>{t.dashboard.onboardingOwnerTip2}</span>
               </div>
             </>
           ) : (
             <>
               <div className="flex items-start gap-3 text-sm">
                 <Bell className="h-4 w-4 mt-0.5 text-muted-foreground" />
-                <span>You'll get notified here about your booking requests and messages from owners.</span>
+                <span>{t.dashboard.onboardingBuyerTip1}</span>
               </div>
             </>
           )}
@@ -84,10 +84,10 @@ const RoleOnboardingModal: React.FC<RoleOnboardingModalProps> = ({ open, role, o
 
         <DialogFooter className="gap-2">
           <Button variant="ghost" onClick={() => complete()} disabled={submitting}>
-            Skip for now
+            {t.dashboard.skipForNow}
           </Button>
           <Button onClick={() => complete(role === 'owner' ? '/dashboard/owner?tab=verification' : undefined)} disabled={submitting}>
-            {role === 'owner' ? 'Go to Verification' : 'Got it'}
+            {role === 'owner' ? t.dashboard.goToVerification : t.dashboard.gotIt}
           </Button>
         </DialogFooter>
       </DialogContent>

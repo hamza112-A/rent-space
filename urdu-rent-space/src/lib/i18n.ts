@@ -221,6 +221,35 @@ interface DashboardTranslations {
   totalBookings: string;
   averageRating: string;
   overview: string;
+  disputes: string;
+  ownerMode: string;
+  buyerMode: string;
+  accountType: string;
+  accountTypeDesc: string;
+  ownerRoleTitle: string;
+  ownerRoleDesc: string;
+  buyerRoleTitle: string;
+  buyerRoleDesc: string;
+  roleActive: string;
+  defaultDashboard: string;
+  ownerDashboardOption: string;
+  buyerDashboardOption: string;
+  becomeOwnerTitle: string;
+  becomeOwnerDesc: string;
+  goToSettings: string;
+  backToDashboard: string;
+  bookingsAsBuyer: string;
+  awaitingDecision: string;
+  onboardingOwnerTitle: string;
+  onboardingBuyerTitle: string;
+  onboardingOwnerDesc: string;
+  onboardingBuyerDesc: string;
+  onboardingOwnerTip1: string;
+  onboardingOwnerTip2: string;
+  onboardingBuyerTip1: string;
+  skipForNow: string;
+  goToVerification: string;
+  gotIt: string;
 }
 
 interface VerificationTranslations {
@@ -285,6 +314,7 @@ interface CommonTranslations {
   noResults: string;
   seeMore: string;
   seeLess: string;
+  add: string;
 }
 
 interface FiltersTranslations {
@@ -585,6 +615,35 @@ export const translations: Record<Language, TranslationType> = {
       totalBookings: 'Total Bookings',
       averageRating: 'Average Rating',
       overview: 'Overview',
+      disputes: 'Disputes',
+      ownerMode: 'Owner mode',
+      buyerMode: 'Buyer mode',
+      accountType: 'Account Type',
+      accountTypeDesc: 'Owner and Buyer are separate capabilities on your account — add either one anytime',
+      ownerRoleTitle: 'Owner',
+      ownerRoleDesc: 'List items for rent',
+      buyerRoleTitle: 'Buyer',
+      buyerRoleDesc: 'Book items from other owners',
+      roleActive: 'Active',
+      defaultDashboard: 'Default dashboard on login',
+      ownerDashboardOption: 'Owner dashboard',
+      buyerDashboardOption: 'Buyer dashboard',
+      becomeOwnerTitle: 'Become an Owner to list items',
+      becomeOwnerDesc: 'Your account is currently set up as a Buyer only. Add the Owner capability from Settings to start listing items for rent.',
+      goToSettings: 'Go to Settings',
+      backToDashboard: 'Back to Dashboard',
+      bookingsAsBuyer: 'Your bookings as a buyer',
+      awaitingDecision: 'awaiting your decision',
+      onboardingOwnerTitle: "You're now an Owner",
+      onboardingBuyerTitle: "You're now a Buyer",
+      onboardingOwnerDesc: 'You can list items for rent. A couple of things to set up before your first listing:',
+      onboardingBuyerDesc: 'You can now book items from other owners. A couple of quick tips:',
+      onboardingOwnerTip1: 'Add a payout method in Settings so you can get paid for completed bookings.',
+      onboardingOwnerTip2: "Verified owners get more bookings — finish identity verification when you can.",
+      onboardingBuyerTip1: "You'll get notified here about your booking requests and messages from owners.",
+      skipForNow: 'Skip for now',
+      goToVerification: 'Go to Verification',
+      gotIt: 'Got it',
     },
     // Verification
     verification: {
@@ -649,6 +708,7 @@ export const translations: Record<Language, TranslationType> = {
       noResults: 'No results found',
       seeMore: 'See More',
       seeLess: 'See Less',
+      add: 'Add',
     },
     // Filters
     filters: {
@@ -930,6 +990,35 @@ export const translations: Record<Language, TranslationType> = {
       totalBookings: 'کل بکنگز',
       averageRating: 'اوسط ریٹنگ',
       overview: 'جائزہ',
+      disputes: 'تنازعات',
+      ownerMode: 'مالک موڈ',
+      buyerMode: 'خریدار موڈ',
+      accountType: 'اکاؤنٹ کی قسم',
+      accountTypeDesc: 'مالک اور خریدار آپ کے اکاؤنٹ کی الگ الگ صلاحیتیں ہیں — کسی بھی وقت کوئی بھی شامل کریں',
+      ownerRoleTitle: 'مالک',
+      ownerRoleDesc: 'کرائے پر اشیاء دیں',
+      buyerRoleTitle: 'خریدار',
+      buyerRoleDesc: 'دوسرے مالکان سے اشیاء کرائے پر لیں',
+      roleActive: 'فعال',
+      defaultDashboard: 'لاگ اِن پر ڈیفالٹ ڈیش بورڈ',
+      ownerDashboardOption: 'مالک ڈیش بورڈ',
+      buyerDashboardOption: 'خریدار ڈیش بورڈ',
+      becomeOwnerTitle: 'اشیاء درج کرنے کے لیے مالک بنیں',
+      becomeOwnerDesc: 'آپ کا اکاؤنٹ فی الحال صرف خریدار کے طور پر سیٹ ہے۔ کرائے پر اشیاء درج کرنا شروع کرنے کے لیے سیٹنگز سے مالک کی صلاحیت شامل کریں۔',
+      goToSettings: 'سیٹنگز پر جائیں',
+      backToDashboard: 'ڈیش بورڈ پر واپس جائیں',
+      bookingsAsBuyer: 'بطور خریدار آپ کی بکنگز',
+      awaitingDecision: 'آپ کے فیصلے کا منتظر',
+      onboardingOwnerTitle: 'اب آپ ایک مالک ہیں',
+      onboardingBuyerTitle: 'اب آپ ایک خریدار ہیں',
+      onboardingOwnerDesc: 'اب آپ کرائے پر اشیاء درج کر سکتے ہیں۔ اپنی پہلی لسٹنگ سے پہلے چند چیزیں سیٹ کر لیں:',
+      onboardingBuyerDesc: 'اب آپ دوسرے مالکان سے اشیاء بک کر سکتے ہیں۔ چند فوری تجاویز:',
+      onboardingOwnerTip1: 'مکمل بکنگز کی ادائیگی حاصل کرنے کے لیے سیٹنگز میں ادائیگی وصولی کا طریقہ شامل کریں۔',
+      onboardingOwnerTip2: 'تصدیق شدہ مالکان کو زیادہ بکنگز ملتی ہیں — جب ممکن ہو شناختی تصدیق مکمل کریں۔',
+      onboardingBuyerTip1: 'آپ کو یہاں اپنی بکنگ درخواستوں اور مالکان کے پیغامات کے بارے میں مطلع کیا جائے گا۔',
+      skipForNow: 'ابھی کے لیے نظر انداز کریں',
+      goToVerification: 'تصدیق پر جائیں',
+      gotIt: 'سمجھ گیا',
     },
     // Verification
     verification: {
@@ -994,6 +1083,7 @@ export const translations: Record<Language, TranslationType> = {
       noResults: 'کوئی نتائج نہیں ملے',
       seeMore: 'مزید دیکھیں',
       seeLess: 'کم دیکھیں',
+      add: 'شامل کریں',
     },
     // Filters
     filters: {

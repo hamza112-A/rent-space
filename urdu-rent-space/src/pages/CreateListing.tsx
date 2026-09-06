@@ -311,15 +311,15 @@ const CreateListing: React.FC = () => {
           <Card className="max-w-md w-full">
             <CardContent className="p-8 text-center space-y-4">
               <Building2 className="h-10 w-10 text-primary mx-auto" />
-              <h1 className="text-xl font-bold text-foreground">Become an Owner to list items</h1>
+              <h1 className="text-xl font-bold text-foreground">{t.dashboard.becomeOwnerTitle}</h1>
               <p className="text-muted-foreground text-sm">
-                Your account is currently set up as a Buyer only. Add the Owner capability from Settings to start listing items for rent.
+                {t.dashboard.becomeOwnerDesc}
               </p>
               <Button className="w-full" onClick={() => navigate('/dashboard/buyer?tab=settings')}>
-                Go to Settings
+                {t.dashboard.goToSettings}
               </Button>
               <Link to="/dashboard" className="block text-sm text-muted-foreground hover:text-foreground">
-                Back to Dashboard
+                {t.dashboard.backToDashboard}
               </Link>
             </CardContent>
           </Card>

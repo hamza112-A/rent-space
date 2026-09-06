@@ -54,18 +54,20 @@ interface DashboardShellProps {
 
 // Which granular admin role(s) can see each admin tab — see
 // docs/redesign/11-admin-panel.md. 'superadmin' can always see everything
-// regardless of what's listed here (filtered below).
-const ADMIN_TABS_ALL = [
-  { id: 'admin-dashboard', label: 'Admin Dashboard', icon: BarChart3, adminRoles: ['support', 'finance'] },
-  { id: 'admin-users', label: 'User Management', icon: Users, adminRoles: ['support'] },
-  { id: 'admin-listings', label: 'Listing Management', icon: Building2, adminRoles: ['support'] },
-  { id: 'admin-verifications', label: 'Verifications', icon: CheckCircle, adminRoles: ['support'] },
-  { id: 'admin-bookings', label: 'All Bookings', icon: CalendarDays, adminRoles: ['support'] },
+// regardless of what's listed here (filtered below). Labels fall back to
+// English where no translation key exists yet (pre-existing gap, not
+// specific to the owner/buyer split).
+const getAdminTabsAll = (t: ReturnType<typeof useLanguage>['t']) => [
+  { id: 'admin-dashboard', label: t.admin?.dashboard || 'Admin Dashboard', icon: BarChart3, adminRoles: ['support', 'finance'] },
+  { id: 'admin-users', label: t.admin?.users || 'User Management', icon: Users, adminRoles: ['support'] },
+  { id: 'admin-listings', label: t.admin?.listings || 'Listing Management', icon: Building2, adminRoles: ['support'] },
+  { id: 'admin-verifications', label: t.admin?.verifications || 'Verifications', icon: CheckCircle, adminRoles: ['support'] },
+  { id: 'admin-bookings', label: t.admin?.bookings || 'All Bookings', icon: CalendarDays, adminRoles: ['support'] },
   { id: 'admin-disputes', label: 'Dispute Management', icon: AlertTriangle, adminRoles: ['support'] },
   { id: 'admin-payouts', label: 'Payout Oversight', icon: DollarSign, adminRoles: ['finance'] },
   { id: 'admin-reports', label: 'Report Queue', icon: Flag, adminRoles: ['support'] },
-  { id: 'admin-analytics', label: 'Analytics', icon: TrendingUp, adminRoles: ['support', 'finance'] },
-  { id: 'admin-categories', label: 'Categories', icon: Tag, adminRoles: [] as string[] },
+  { id: 'admin-analytics', label: t.dashboard.analytics, icon: TrendingUp, adminRoles: ['support', 'finance'] },
+  { id: 'admin-categories', label: t.admin?.categories || 'Categories', icon: Tag, adminRoles: [] as string[] },
   { id: 'admin-audit-log', label: 'Audit Log', icon: ClipboardList, adminRoles: [] as string[] },
 ];
 
@@ -84,17 +86,17 @@ const ADMIN_CONTENT: Record<string, React.ReactNode> = {
 };
 
 const DashboardShell: React.FC<DashboardShellProps> = ({ title, subtitle, tabs, activeTab, onTabChange, sidebarExtra }) => {
-  const { isRTL } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isAnyAdmin = user?.isSuperAdmin || (!!user?.adminRole && user.adminRole !== 'none');
-  const adminTabs = ADMIN_TABS_ALL.filter(
+  const adminTabs = getAdminTabsAll(t).filter(
     (tab) => user?.isSuperAdmin || (user?.adminRole && tab.adminRoles.includes(user.adminRole))
   );
 
   const allTabs = isAnyAdmin ? [...tabs, ...adminTabs] : tabs;
-  const activeLabel = allTabs.find((t) => t.id === activeTab)?.label;
+  const activeLabel = allTabs.find((tab) => tab.id === activeTab)?.label;
 
   const SidebarContent = () => (
     <nav className="space-y-1">
@@ -123,7 +125,7 @@ const DashboardShell: React.FC<DashboardShellProps> = ({ title, subtitle, tabs, 
         <>
           <div className="mt-6 pt-6 border-t border-border">
             <p className="px-4 py-2 text-xs font-semibold text-purple-600 uppercase tracking-wider">
-              {user?.isSuperAdmin ? 'Super Admin' : `Admin (${user?.adminRole})`}
+              {user?.isSuperAdmin ? (t.admin?.title || 'Super Admin') : `Admin (${user?.adminRole})`}
             </p>
           </div>
           {adminTabs.map((tab) => {
@@ -199,7 +201,7 @@ const DashboardShell: React.FC<DashboardShellProps> = ({ title, subtitle, tabs, 
           {/* Main Content */}
           <main className="flex-1 p-4 lg:p-8 mt-14 lg:mt-0">
             <div className="max-w-6xl mx-auto">
-              {tabs.find((t) => t.id === activeTab)?.content}
+              {tabs.find((tab) => tab.id === activeTab)?.content}
               {isAnyAdmin && ADMIN_CONTENT[activeTab]}
             </div>
           </main>

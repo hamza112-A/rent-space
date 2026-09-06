@@ -20,7 +20,7 @@ const BuyerDashboard: React.FC = () => {
     { id: 'overview', label: t.dashboard.overview, icon: LayoutDashboard, content: <DashboardOverview perspective="buyer" onNavigateTab={setActiveTab} /> },
     { id: 'bookings', label: t.dashboard.myBookings, icon: Calendar, content: <MyBookings perspective="buyer" onNavigateTab={setActiveTab} /> },
     { id: 'messages', label: t.dashboard.messages, icon: MessageSquare, content: <Messages onNavigateTab={setActiveTab} /> },
-    { id: 'disputes', label: 'Disputes', icon: AlertTriangle, content: <Disputes /> },
+    { id: 'disputes', label: t.dashboard.disputes, icon: AlertTriangle, content: <Disputes /> },
     { id: 'verification', label: t.dashboard.verification, icon: Shield, content: <Verification /> },
     { id: 'settings', label: t.dashboard.settings, icon: Settings, content: <AccountSettings /> },
   ];

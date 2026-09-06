@@ -40,7 +40,7 @@ const OwnerDashboard: React.FC = () => {
     { id: 'listings', label: t.dashboard.myListings, icon: Package, content: <MyListings /> },
     { id: 'bookings', label: t.dashboard.myBookings, icon: Calendar, content: <MyBookings perspective="owner" onNavigateTab={setActiveTab} /> },
     { id: 'messages', label: t.dashboard.messages, icon: MessageSquare, content: <Messages onNavigateTab={setActiveTab} /> },
-    { id: 'disputes', label: 'Disputes', icon: AlertTriangle, content: <Disputes /> },
+    { id: 'disputes', label: t.dashboard.disputes, icon: AlertTriangle, content: <Disputes /> },
     { id: 'earnings', label: t.dashboard.earnings, icon: DollarSign, content: <Earnings /> },
     { id: 'team', label: 'Team', icon: UserSquare2, content: <Team /> },
     { id: 'storefront', label: 'Storefront', icon: Store, content: <StorefrontSettings /> },

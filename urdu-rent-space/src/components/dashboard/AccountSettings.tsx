@@ -736,9 +736,9 @@ const AccountSettings: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            Account Type
+            {t.dashboard.accountType}
           </CardTitle>
-          <CardDescription>Owner and Buyer are separate capabilities on your account — add either one anytime</CardDescription>
+          <CardDescription>{t.dashboard.accountTypeDesc}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -746,15 +746,15 @@ const AccountSettings: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Building2 className="h-5 w-5 text-primary" />
                 <div>
-                  <p className="font-medium text-foreground">Owner</p>
-                  <p className="text-xs text-muted-foreground">List items for rent</p>
+                  <p className="font-medium text-foreground">{t.dashboard.ownerRoleTitle}</p>
+                  <p className="text-xs text-muted-foreground">{t.dashboard.ownerRoleDesc}</p>
                 </div>
               </div>
               {user?.role === 'owner' || user?.role === 'both' ? (
-                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>
+                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">{t.dashboard.roleActive}</Badge>
               ) : (
                 <Button size="sm" variant="outline" disabled={addingRole === 'owner'} onClick={() => handleAddRole('owner')}>
-                  {addingRole === 'owner' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                  {addingRole === 'owner' ? <Loader2 className="h-4 w-4 animate-spin" /> : t.common.add}
                 </Button>
               )}
             </div>
@@ -763,15 +763,15 @@ const AccountSettings: React.FC = () => {
               <div className="flex items-center gap-3">
                 <ShoppingBag className="h-5 w-5 text-secondary" />
                 <div>
-                  <p className="font-medium text-foreground">Buyer</p>
-                  <p className="text-xs text-muted-foreground">Book items from other owners</p>
+                  <p className="font-medium text-foreground">{t.dashboard.buyerRoleTitle}</p>
+                  <p className="text-xs text-muted-foreground">{t.dashboard.buyerRoleDesc}</p>
                 </div>
               </div>
               {user?.role === 'borrower' || user?.role === 'both' ? (
-                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">Active</Badge>
+                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">{t.dashboard.roleActive}</Badge>
               ) : (
                 <Button size="sm" variant="outline" disabled={addingRole === 'borrower'} onClick={() => handleAddRole('borrower')}>
-                  {addingRole === 'borrower' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                  {addingRole === 'borrower' ? <Loader2 className="h-4 w-4 animate-spin" /> : t.common.add}
                 </Button>
               )}
             </div>
@@ -779,7 +779,7 @@ const AccountSettings: React.FC = () => {
 
           {user?.role === 'both' && (
             <div>
-              <Label>Default dashboard on login</Label>
+              <Label>{t.dashboard.defaultDashboard}</Label>
               <Select
                 value={user.activeMode === 'borrower' ? 'borrower' : 'owner'}
                 onValueChange={(value) => handleSwitchDefaultMode(value as 'owner' | 'borrower')}
@@ -789,8 +789,8 @@ const AccountSettings: React.FC = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="owner">Owner dashboard</SelectItem>
-                  <SelectItem value="borrower">Buyer dashboard</SelectItem>
+                  <SelectItem value="owner">{t.dashboard.ownerDashboardOption}</SelectItem>
+                  <SelectItem value="borrower">{t.dashboard.buyerDashboardOption}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
