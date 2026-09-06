@@ -347,6 +347,10 @@ router.post('/', protect, ownerOnly, upload.array('images', 10), asyncHandler(as
   req.body.owner = ownerId;
   if (createdBy) req.body.createdBy = createdBy;
   req.body.ownerPlan = subscription.plan || 'free';
+  // Publish immediately rather than sitting in the 'pending' admin-approval
+  // queue (schema default) — admins can still suspend/reject after the fact
+  // via the existing moderation endpoints.
+  req.body.status = 'active';
   
   // Set expiration based on subscription plan
   const listingDuration = subscription.listingDuration || 48; // hours
@@ -778,7 +782,7 @@ router.post('/bulk-upload', protect, ownerOnly, bulkUpload.single('file'), async
         images: imageUrls.map((url, idx) => ({ public_id: `bulk_${Date.now()}_${i}_${idx}`, url, order: idx })),
         safetyGuidelines: { categorySpecific: getSafetyGuidelinesForCategory(record.category) },
         disclaimers: getDefaultDisclaimers(record.category),
-        status: 'pending',
+        status: 'active',
         expiresAt: null // Business plan listings never expire
       });
       results.created++;

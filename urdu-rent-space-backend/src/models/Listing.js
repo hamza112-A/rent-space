@@ -349,6 +349,29 @@ listingSchema.virtual('imageCount').get(function() {
   return this.images ? this.images.length : 0;
 });
 
+// Pre-save middleware to fill in any pricing tier the owner left blank by
+// deriving it from whichever tier they did set (e.g. a monthly-only listing
+// gets a derived daily/weekly/hourly rate too), without touching tiers the
+// owner explicitly provided. Mirrors the read-time pricePerDay virtual's
+// priority order (daily > hourly > weekly > monthly) so every consumer
+// (listing cards, detail page, booking price calc) agrees on one canonical
+// conversion instead of each re-deriving it differently.
+listingSchema.pre('save', function(next) {
+  if (!this.isModified('pricing')) return next();
+
+  const { hourly, daily, weekly, monthly } = this.pricing;
+  const dailyEquivalent = daily || (hourly ? hourly * 24 : 0) || (weekly ? weekly / 7 : 0) || (monthly ? monthly / 30 : 0);
+
+  if (dailyEquivalent > 0) {
+    if (this.pricing.daily == null) this.pricing.daily = Math.round(dailyEquivalent);
+    if (this.pricing.hourly == null) this.pricing.hourly = Math.round(dailyEquivalent / 24);
+    if (this.pricing.weekly == null) this.pricing.weekly = Math.round(dailyEquivalent * 7);
+    if (this.pricing.monthly == null) this.pricing.monthly = Math.round(dailyEquivalent * 30);
+  }
+
+  next();
+});
+
 // Pre-save middleware to generate slug
 listingSchema.pre('save', function(next) {
   if (this.isModified('title')) {

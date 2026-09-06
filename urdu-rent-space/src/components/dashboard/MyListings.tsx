@@ -63,7 +63,7 @@ interface Listing {
   _id: string;
   title: string;
   category: { name: string } | string;
-  pricing: { basePrice: number; priceType: string };
+  pricing: { hourly?: number; daily?: number; weekly?: number; monthly?: number };
   location: { city: string; area: string };
   status: string;
   views: number;
@@ -357,8 +357,9 @@ const MyListings: React.FC = () => {
   };
 
   const formatPrice = (listing: Listing) => {
-    const price = listing.pricing?.basePrice || 0;
-    const type = listing.pricing?.priceType || 'day';
+    const pricing = listing.pricing;
+    const price = pricing?.daily ?? pricing?.hourly ?? pricing?.weekly ?? pricing?.monthly ?? 0;
+    const type = pricing?.daily ? 'day' : pricing?.hourly ? 'hour' : pricing?.weekly ? 'week' : 'month';
     return `PKR ${price.toLocaleString()}/${type}`;
   };
 
