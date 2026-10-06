@@ -21,6 +21,7 @@ import {
   Package,
   Clock,
   TrendingUp,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Review {
@@ -48,6 +49,7 @@ const UserProfile: React.FC = () => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -77,12 +79,14 @@ const UserProfile: React.FC = () => {
     
     try {
       setReviewsLoading(true);
+      setReviewsError(false);
       const response = await userApi.getReviews(userId, { page, limit: 10 });
       setReviews(response.data.data || []);
       setTotalPages(response.data.pagination?.totalPages || 1);
       setCurrentPage(page);
     } catch (error: any) {
       console.error('Failed to fetch reviews:', error);
+      setReviewsError(true);
     } finally {
       setReviewsLoading(false);
     }
@@ -297,6 +301,13 @@ const UserProfile: React.FC = () => {
                       <Skeleton key={i} className="h-32 w-full" />
                     ))}
                   </div>
+                ) : reviewsError ? (
+                  <EmptyState
+                    icon={AlertCircle}
+                    title="Couldn't load reviews"
+                    actionLabel="Try Again"
+                    onAction={() => fetchReviews(currentPage)}
+                  />
                 ) : reviews.length === 0 ? (
                   <EmptyState icon={MessageCircle} title="No reviews yet" />
                 ) : (

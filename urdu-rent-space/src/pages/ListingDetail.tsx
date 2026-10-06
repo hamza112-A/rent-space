@@ -61,6 +61,8 @@ const ListingDetail: React.FC = () => {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState(false);
+  const [reviewsRetryCount, setReviewsRetryCount] = useState(0);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
 
   const [retryCount, setRetryCount] = useState(0);
@@ -91,11 +93,12 @@ const ListingDetail: React.FC = () => {
       
       try {
         setReviewsLoading(true);
+        setReviewsError(false);
         const response = await listingApi.getReviews(listingId, { limit: 5 });
         setReviews(response.data.data || []);
       } catch (err: any) {
         console.error('Failed to fetch reviews:', err);
-        // Don't show error to user, just keep reviews empty
+        setReviewsError(true);
       } finally {
         setReviewsLoading(false);
       }
@@ -104,7 +107,7 @@ const ListingDetail: React.FC = () => {
     if (listingId) {
       fetchReviews();
     }
-  }, [listingId]);
+  }, [listingId, reviewsRetryCount]);
 
   // Similar listings for now (can be fetched from API later)
   const similarListings: any[] = [];
@@ -667,6 +670,13 @@ const ListingDetail: React.FC = () => {
                       <Skeleton className="h-24 w-full" />
                       <Skeleton className="h-24 w-full" />
                     </div>
+                  ) : reviewsError ? (
+                    <EmptyState
+                      icon={AlertCircle}
+                      title="Couldn't load reviews"
+                      actionLabel="Try Again"
+                      onAction={() => setReviewsRetryCount((c) => c + 1)}
+                    />
                   ) : reviews.length === 0 ? (
                     <EmptyState title="No reviews yet" />
                   ) : (

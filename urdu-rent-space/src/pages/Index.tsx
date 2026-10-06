@@ -13,6 +13,7 @@ import EmptyState from '@/components/common/EmptyState';
 import { 
   Search, 
   MapPin, 
+  AlertCircle,
   Star, 
   Shield, 
   Clock, 
@@ -59,20 +60,25 @@ const Index: React.FC = () => {
   const navigate = useNavigate();
   const [featuredListings, setFeaturedListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const fetchListings = async () => {
       try {
+        setLoading(true);
+        setFetchError(false);
         const response = await listingApi.search({ limit: 8, sort: 'newest' });
         setFeaturedListings(response.data?.data || []);
       } catch (err) {
         console.error('Failed to fetch listings:', err);
+        setFetchError(true);
       } finally {
         setLoading(false);
       }
     };
     fetchListings();
-  }, []);
+  }, [retryCount]);
 
   const popularSearchLinks = [
     { labelKey: 'apartments' as const, to: '/category/property' },
@@ -183,6 +189,16 @@ const Index: React.FC = () => {
                   </div>
                 </Card>
               ))
+            ) : fetchError ? (
+              <div className="col-span-4">
+                <EmptyState
+                  icon={AlertCircle}
+                  title="Couldn't load listings"
+                  description="Something went wrong while loading featured listings."
+                  actionLabel="Try Again"
+                  onAction={() => setRetryCount((c) => c + 1)}
+                />
+              </div>
             ) : featuredListings.length > 0 ? (
               featuredListings.map((listing) => (
                 <ListingCard key={listing._id} listing={listing} />
