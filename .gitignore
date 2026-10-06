@@ -45,13 +45,7 @@ Thumbs.db
 *.bak
 *~
 
-# Docker
 *.env.backup
-docker-compose.override.yml
-
-# Kubernetes
-k8s/*.bak
-kubeconfig
 
 # Certificates
 *.pem

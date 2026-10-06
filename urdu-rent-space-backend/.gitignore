@@ -143,14 +143,6 @@ dist/
 # PM2 ecosystem file
 ecosystem.config.js
 
-# Docker
-.dockerignore
-Dockerfile
-docker-compose.yml
-
-# Kubernetes
-k8s/
-
 # Terraform
 *.tfstate
 *.tfstate.*
