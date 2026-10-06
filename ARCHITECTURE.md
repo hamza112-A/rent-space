@@ -11,17 +11,12 @@ The Urdu Rental Space is a full-stack, containerized application designed for sc
 │                         Internet / Users                         │
 └────────────────────────────┬────────────────────────────────────┘
                              │
-                    ┌────────▼────────┐
-                    │   Load Balancer  │
-                    │   / Ingress      │
-                    └────────┬─────────┘
-                             │
             ┌────────────────┴────────────────┐
             │                                 │
      ┌──────▼─────┐                   ┌───────▼──────┐
      │  Frontend   │                  │   Backend    │
      │  (React)    │◄────REST API────▶│   (Node.js)  │
-     │  Nginx      │                  │   Express    │
+     │  Vercel     │                  │   Render     │
      └─────────────┘                  └───────┬──────┘
                                               │
                                ┌──────────────┴──────────────┐
@@ -36,8 +31,8 @@ The Urdu Rental Space is a full-stack, containerized application designed for sc
 
 ### Frontend Layer
 **Technology:** React 18 + TypeScript + Vite  
-**Container:** Nginx Alpine  
-**Port:** 80  
+**Hosting:** Vercel (static SPA)  
+**Dev Port:** 5173  
 **Responsibilities:**
 - User interface rendering
 - Client-side routing
@@ -54,7 +49,7 @@ The Urdu Rental Space is a full-stack, containerized application designed for sc
 
 ### Backend Layer
 **Technology:** Node.js + Express  
-**Container:** Node Alpine  
+**Hosting:** Render  
 **Port:** 5000  
 **Responsibilities:**
 - RESTful API endpoints
@@ -143,68 +138,6 @@ User → Frontend → Backend → Check Availability
                   Return Confirmation
 ```
 
-## 🌐 Network Architecture
-
-### Docker Compose Network
-```
-┌─────────────────────────────────────────────┐
-│       urdu-rental-network (bridge)           │
-│                                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│  │ Frontend │  │ Backend  │  │ MongoDB  │ │
-│  │  :3000   │  │  :5000   │  │  :27017  │ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘ │
-│       │             │               │       │
-│       └─────────────┴───────────────┘       │
-│                     │                       │
-│              ┌──────▼──────┐               │
-│              │    Redis    │               │
-│              │    :6379    │               │
-│              └─────────────┘               │
-└─────────────────────────────────────────────┘
-        │
-        ▼
-    Host Ports
-    3000, 5000, 27017, 6379
-```
-
-### Kubernetes Network
-```
-┌─────────────────────────────────────────────────┐
-│           Namespace: urdu-rental                 │
-│                                                 │
-│  ┌──────────────────────────────────────┐      │
-│  │         Ingress Controller           │      │
-│  │  Routes: /, /api, websockets        │      │
-│  └──────────────┬───────────────────────┘      │
-│                 │                               │
-│     ┌───────────┴──────────────┐               │
-│     │                           │               │
-│  ┌──▼────────────┐   ┌─────────▼──────────┐   │
-│  │ frontend-svc  │   │  backend-svc       │   │
-│  │ ClusterIP:80  │   │  ClusterIP:5000    │   │
-│  └──┬────────────┘   └─────────┬──────────┘   │
-│     │                           │               │
-│  ┌──▼────────────┐   ┌─────────▼──────────┐   │
-│  │Frontend Pods  │   │  Backend Pods      │   │
-│  │  (2-5 replicas)│  │  (2-10 replicas)  │   │
-│  │  + HPA        │   │  + HPA            │   │
-│  └───────────────┘   └─────────┬──────────┘   │
-│                                 │               │
-│                 ┌───────────────┴───────┐      │
-│                 │                       │      │
-│         ┌───────▼─────────┐   ┌────────▼─────┐│
-│         │  mongodb-svc    │   │  redis-svc   ││
-│         │  ClusterIP:27017│   │ClusterIP:6379││
-│         └───────┬─────────┘   └────────┬─────┘│
-│                 │                       │      │
-│         ┌───────▼─────────┐   ┌────────▼─────┐│
-│         │ MongoDB Pod     │   │  Redis Pod   ││
-│         │ + PVC (10Gi)   │   │ + PVC (5Gi)  ││
-│         └─────────────────┘   └──────────────┘│
-└─────────────────────────────────────────────────┘
-```
-
 ## 🔒 Security Architecture
 
 ### Authentication Flow
@@ -233,7 +166,7 @@ User → Frontend → Backend → Check Availability
 ┌─────────────────────────────────────────┐
 │  Layer 1: Network (Firewall, HTTPS)    │
 ├─────────────────────────────────────────┤
-│  Layer 2: Ingress (Rate Limiting)      │
+│  Layer 2: API (Rate Limiting)          │
 ├─────────────────────────────────────────┤
 │  Layer 3: Application (Authentication) │
 ├─────────────────────────────────────────┤
@@ -242,147 +175,6 @@ User → Frontend → Backend → Check Availability
 │  Layer 5: Data (Encryption at Rest)    │
 └─────────────────────────────────────────┘
 ```
-
-## 📊 Scaling Strategy
-
-### Horizontal Scaling (Kubernetes)
-
-**Frontend Pods:**
-- Manual: 2-5 replicas
-- Auto: CPU > 70%
-- Load: Distributed by Service
-
-**Backend Pods:**
-- Manual: 2-10 replicas
-- Auto: CPU > 70%, Memory > 80%
-- Load: Distributed by Service
-
-**Database:**
-- MongoDB: Single replica (StatefulSet)
-- Future: MongoDB Replica Set (3-5 nodes)
-
-**Cache:**
-- Redis: Single instance
-- Future: Redis Cluster/Sentinel
-
-### Vertical Scaling
-
-**Resource Limits:**
-```yaml
-Backend:
-  requests: {memory: 512Mi, cpu: 250m}
-  limits:   {memory: 1Gi,   cpu: 1000m}
-
-Frontend:
-  requests: {memory: 128Mi, cpu: 100m}
-  limits:   {memory: 256Mi, cpu: 500m}
-
-MongoDB:
-  requests: {memory: 512Mi, cpu: 250m}
-  limits:   {memory: 2Gi,   cpu: 1000m}
-
-Redis:
-  requests: {memory: 256Mi, cpu: 100m}
-  limits:   {memory: 512Mi, cpu: 500m}
-```
-
-## 💾 Data Persistence
-
-### Volume Strategy
-
-**MongoDB:**
-- PVC: 10Gi
-- StorageClass: Fast SSD
-- Backup: Daily automated backups
-- Retention: 30 days
-
-**Redis:**
-- PVC: 5Gi
-- StorageClass: Standard
-- AOF: Enabled
-- Snapshots: Every 15 minutes
-
-**Uploads:**
-- External: Cloudinary CDN
-- Local: Not stored in containers
-
-## 🔄 Deployment Strategies
-
-### Rolling Update
-```
-Current:  [v1.0] [v1.0] [v1.0]
-          ↓
-Step 1:   [v1.0] [v1.0] [v1.1]
-          ↓
-Step 2:   [v1.0] [v1.1] [v1.1]
-          ↓
-Final:    [v1.1] [v1.1] [v1.1]
-```
-
-**Configuration:**
-- maxSurge: 1 (25%)
-- maxUnavailable: 0 (0%)
-- Zero downtime
-
-### Blue-Green Deployment
-```
-Blue (Current):    [v1.0] [v1.0] [v1.0]  ← Traffic
-Green (New):       [v1.1] [v1.1] [v1.1]  ← Testing
-
-After validation, switch traffic to Green
-```
-
-### Canary Deployment
-```
-Stable: [v1.0] [v1.0] [v1.0] [v1.0]  ← 90% traffic
-Canary: [v1.1]                         ← 10% traffic
-
-If successful, gradually increase canary traffic
-```
-
-## 🔍 Monitoring & Observability
-
-### Metrics Collection
-```
-Application Metrics
-       ↓
-   Prometheus
-       ↓
-    Grafana
-       ↓
-   Dashboards
-```
-
-**Key Metrics:**
-- Request rate
-- Error rate
-- Response time
-- Resource usage
-- Active users
-- Booking conversions
-
-### Logging Architecture
-```
-Application Logs
-       ↓
-  FluentD/Fluentbit
-       ↓
-  Elasticsearch
-       ↓
-    Kibana
-       ↓
-   Log Analysis
-```
-
-### Health Checks
-
-**Liveness Probe:**
-- Checks if container is alive
-- Restarts if failing
-
-**Readiness Probe:**
-- Checks if container can serve traffic
-- Removes from service if failing
 
 ## 🌍 Multi-Region Architecture (Future)
 
@@ -428,28 +220,6 @@ Application Logs
 - Sharding (future)
 - Read replicas (future)
 - Aggregation optimization
-
-## 🔄 CI/CD Pipeline
-
-```
-Developer Push
-       ↓
-   GitHub
-       ↓
-GitHub Actions
-       ↓
-  Build & Test
-       ↓
- Build Images
-       ↓
-Push to Registry
-       ↓
-  Deploy to K8s
-       ↓
-  Run Tests
-       ↓
-   Notify Team
-```
 
 ## 📱 Mobile Architecture (Future)
 
